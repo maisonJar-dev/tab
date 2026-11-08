@@ -132,7 +132,6 @@ def test_word_is_centred_on_the_origin() -> None:
     ys = [y for _, y in word_points]
     assert (min(xs) + max(xs)) / 2 == pytest.approx(0)
     assert (min(ys) + max(ys)) / 2 == pytest.approx(0)
-    assert create_animation().word_bottom_y_pixels == pytest.approx(max(ys))
 
 
 def test_same_inputs_give_the_same_frames() -> None:

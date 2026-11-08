@@ -38,12 +38,6 @@ QLabel {
     qproperty-lineColor: #F5F1F1;
 }
 
-#splash_continue_hint {
-    color: #8C8E92;
-    font-size: 13px;
-    letter-spacing: 2px;
-}
-
 /* Tab switcher (Tab key) and the Profile corner button */
 
 #tab_switcher_panel {

@@ -9,8 +9,8 @@ Uses the `src/` layout so tests run against the installed package, not stray fil
 - `tab/app.py`: `TabApplicationWindow`, the top-level window. Switches screens with a `QStackedWidget`,
   restores timer progress on launch, autosaves it every 5 s and on close.
 - `tab/screens/`: full-window screens.
-  - `splash.py`: plays the cube-to-"tab" intro (Space/Enter skips), then a bouncing "Press space to
-    continue" hint. Only clock, painting and keys; the geometry is in `core/cube_to_word_animation.py`.
+  - `splash.py`: plays the cube-to-"tab" intro, then continues on its own 3 s later
+    (Tab/Space/Enter continue at once). Only clock, painting and keys; the geometry is in `core/cube_to_word_animation.py`.
   - `main.py`: views fill the window over the wall; Tab opens the switcher; Profile button in the bottom-left corner.
 - `tab/widgets/`: reusable UI pieces.
   - `tab_switcher.py`: the Tab-key overlay: a centred horizontal row of views over the undimmed

@@ -4,8 +4,9 @@
 Image files the app ships with.
 
 ## Contents
-- `tab_icon.svg`: the app icon, a black-and-white graffiti "T". Built in layers (block shadow,
-  outline, fill, shine, sparkle) from one shared letter shape in `<defs>`.
+- `tab_icon.svg`: the app icon, a bone-white capital T shaped like two brush strokes (round loaded
+  start, uneven edges, tapering end) merged into one solid letter with a soft grey outline, stem
+  centred on the crossbar, turned 90° clockwise so its top points right. Generated with a fixed seed.
 - `background.svg`: the "Hard Work is the Goal" graffiti wall behind the main screen (2560x1600,
   cover-scaled). Painted by `widgets/background.py`; not shown on the launch page.
 
@@ -16,4 +17,4 @@ Packaged automatically with `src/tab` by hatchling.
 
 ## Conventions
 - Prefer SVG so assets stay sharp at every size and can be edited as text.
-- Black, white and the palette in `styles/theme.qss` only.
+- Colours from the palette in `styles/theme.qss` (black, bone, tan, the greys) or shades of them.

@@ -193,10 +193,6 @@ class CubeToWordAnimation:
         x_height_pixels = self._scale_pixels * WORD_X_HEIGHT_FRACTION
         return x_height_pixels * 0.8 + self._scale_pixels * 0.35
 
-    @property
-    def word_bottom_y_pixels(self) -> float:
-        return max(y for segment in self.word_segments for _, y in segment)
-
     def line_segments_at(self, elapsed_seconds: float) -> list[LineSegment]:
         if elapsed_seconds < ASSEMBLE_START_SECONDS:
             cube_corners = self._cube_corners_on_screen(elapsed_seconds)
