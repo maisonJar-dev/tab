@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# Tracer rule: every top-level directory (except dot-directories) must contain a README.md.
+set -euo pipefail
+
+directories_missing_readme=()
+
+while IFS= read -r top_level_directory; do
+  [[ "$top_level_directory" == .* ]] && continue
+  if ! git ls-files --error-unmatch "$top_level_directory/README.md" >/dev/null 2>&1; then
+    directories_missing_readme+=("$top_level_directory")
+  fi
+done < <(git ls-files | grep '/' | cut -d/ -f1 | sort -u)
+
+if (( ${#directories_missing_readme[@]} > 0 )); then
+  echo "Commit blocked: Tracer rule (see CLAUDE.md) requires a README.md in each top-level directory." >&2
+  for directory in "${directories_missing_readme[@]}"; do
+    echo "  missing: $directory/README.md" >&2
+  done
+  exit 1
+fi
