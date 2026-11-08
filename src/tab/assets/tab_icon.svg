@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 256 256" width="256" height="256">
+  <!-- Graffiti "T" app icon, black and white only. Built like a painted piece, in layers:
+       block shadow, black outline, white fill, then shine marks and a spray sparkle.
+       Strokes are drawn under fills so the letter and its drips merge into one shape. -->
+  <defs>
+    <g id="letter">
+      <!-- slanted crossbar flaring to a point on the right, tapering stem -->
+      <path d="M 30 70 C 78 50 156 38 210 32 L 234 20 L 224 60 C 204 78 180 86 158 90
+               C 155 128 160 168 164 204 Q 166 222 148 224 L 112 226 Q 96 226 98 210
+               C 102 170 104 132 100 98 C 82 100 60 106 42 112 Q 22 116 24 96 Z"/>
+      <!-- drips -->
+      <path d="M 54 104 L 68 102 L 68 138 Q 68 148 61 148 Q 54 148 54 138 Z"/>
+      <path d="M 184 80 L 196 76 L 196 104 Q 196 112 190 112 Q 184 112 184 104 Z"/>
+      <path d="M 120 220 L 136 220 L 136 238 Q 136 248 128 248 Q 120 248 120 238 Z"/>
+    </g>
+  </defs>
+
+  <rect width="256" height="256" rx="56" fill="#0A0A0A"/>
+
+  <!-- the whole piece, scaled to sit inside the tile with margin -->
+  <g transform="translate(20 15) scale(0.82)">
+
+  <!-- block shadow: white edge, black body, offset down-right -->
+  <g transform="translate(10 10)">
+    <use xlink:href="#letter" fill="none" stroke="#F5F1F1" stroke-width="10" stroke-linejoin="round"/>
+    <use xlink:href="#letter" fill="#0A0A0A"/>
+  </g>
+
+  <!-- the letter: thick black outline separating it from the shadow, then the white fill -->
+  <use xlink:href="#letter" fill="none" stroke="#0A0A0A" stroke-width="14" stroke-linejoin="round"/>
+  <use xlink:href="#letter" fill="#F5F1F1"/>
+
+  <!-- shine marks -->
+  <path d="M 48 76 C 80 62 120 54 150 50" fill="none" stroke="#0A0A0A" stroke-width="6" stroke-linecap="round"/>
+  <path d="M 118 110 C 116 130 115 150 116 172" fill="none" stroke="#0A0A0A" stroke-width="6" stroke-linecap="round"/>
+
+  <!-- spray sparkle -->
+  <path d="M 40 22 L 44 34 L 56 38 L 44 42 L 40 54 L 36 42 L 24 38 L 36 34 Z" fill="#F5F1F1"/>
+
+  </g>
+</svg>
