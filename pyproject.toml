@@ -21,7 +21,8 @@ dev = [
     "ruff>=0.5",
 ]
 
-[project.scripts]
+# gui-scripts: on Windows this launches without a console window; identical elsewhere.
+[project.gui-scripts]
 tab = "tab.__main__:main"
 
 [tool.hatch.build.targets.wheel]
