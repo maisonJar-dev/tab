@@ -1,0 +1,38 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "tab"
+version = "0.1.0"
+description = "A personal Pomodoro timer and study helper."
+readme = "README.md"
+license = "Apache-2.0"
+requires-python = ">=3.11"
+dependencies = [
+    # 6.12.0 leaks a reference to None on every void method call, crashing within seconds.
+    "PySide6>=6.6,<6.12",
+    "pydantic>=2.5",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8",
+    "ruff>=0.5",
+]
+
+[project.scripts]
+tab = "tab.__main__:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/tab"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

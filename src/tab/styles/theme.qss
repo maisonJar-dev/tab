@@ -1,0 +1,188 @@
+/*
+ * The single source of styling for tab. Widgets are targeted by objectName (#name).
+ *
+ * Palette: black and bone, with tan.
+ *   black      #0A0A0A   window background
+ *   surface    #0F1012   dial face, inputs, switcher and settings panels (near-black stone)
+ *   depth      #1B1C1F   selection band, lit timer control, hover, borders (charcoal)
+ *   divider    #2B2D31   the switcher panel's edge; outlines on unlit controls (slate)
+ *   muted      #8C8E92   secondary text, minor markings, unlit icons (stone grey)
+ *   bone       #F5F1F1   primary text, major markings, control icons
+ *   tan        #B89A72   the one accent: dial hands and arc, selected icons and phase, focus rings,
+ *                        checked fills
+ *
+ * Contrast rule: tan is ~7.5:1 on black, so it works as lines and as fills.
+ * Text on a tan fill is black.
+ */
+
+/* Only the window is painted black (the launch page sits on it). Everything else stays
+   transparent so the main screen's graffiti wall (widgets/background.py) shows through;
+   widgets that need a solid fill (dial face, inputs, panels, lit controls) set their own. */
+QMainWindow {
+    background-color: #0A0A0A;
+}
+
+QWidget {
+    color: #F5F1F1;
+    font-family: "Helvetica Neue", "Inter", sans-serif;
+    font-size: 14px;
+}
+
+QLabel {
+    background-color: transparent;
+}
+
+/* Splash */
+
+#splash_screen {
+    qproperty-lineColor: #F5F1F1;
+}
+
+#splash_continue_hint {
+    color: #8C8E92;
+    font-size: 13px;
+    letter-spacing: 2px;
+}
+
+/* Tab switcher (Tab key) and the Profile corner button */
+
+#tab_switcher_panel {
+    background-color: #0F1012;
+    border: 1px solid #2B2D31;
+    border-radius: 16px;
+}
+
+#tab_switcher_tile {
+    background-color: transparent;
+    border: none;
+    border-radius: 10px;
+    padding: 16px;
+    qproperty-iconColor: #8C8E92;
+    qproperty-selectedIconColor: #B89A72;
+}
+
+#tab_switcher_tile:checked {
+    background-color: #1B1C1F;
+}
+
+#profile_corner_button {
+    background-color: transparent;
+    border: none;
+    border-radius: 8px;
+    padding: 8px;
+    qproperty-iconColor: #8C8E92;
+    qproperty-selectedIconColor: #B89A72;
+}
+
+#profile_corner_button:hover {
+    background-color: #1B1C1F;
+}
+
+/* Views */
+
+#settings_panel {
+    background-color: #0F1012;
+    border: 1px solid #2B2D31;
+    border-radius: 16px;
+}
+
+#chronograph_dial {
+    qproperty-faceColor: #0F1012;
+    qproperty-subdialColor: #0A0A0A;
+    qproperty-markingColor: #F5F1F1;
+    qproperty-minorMarkingColor: #8C8E92;
+    qproperty-accentColor: #B89A72;
+}
+
+#rotary_picker {
+    qproperty-selectedTextColor: #B89A72;
+    qproperty-unselectedTextColor: #8C8E92;
+    qproperty-selectionBandColor: #1B1C1F;
+}
+
+#timer_countdown_label {
+    font-family: "DejaVu Sans Mono", "Courier New", monospace;
+    font-size: 40px;
+}
+
+#profile_stat_value {
+    font-size: 18px;
+}
+
+/* Controls */
+
+QPushButton {
+    background-color: transparent;
+    color: #F5F1F1;
+    border: 1px solid #1B1C1F;
+    border-radius: 14px;
+    padding: 6px 20px;
+}
+
+QPushButton:hover {
+    border-color: #8C8E92;
+}
+
+QPushButton:pressed {
+    background-color: #1B1C1F;
+}
+
+/* Timer controls. Lit (checked) = like the phase wheel's selection band, with a tan icon.
+   Start/Pause stay lit to show whether the timer runs; Reset only flashes when pressed. */
+
+#timer_control_button {
+    background-color: transparent;
+    border: 1px solid #2B2D31;
+    border-radius: 10px;
+    padding: 9px 0;
+    qproperty-iconColor: #8C8E92;
+    qproperty-selectedIconColor: #B89A72;
+}
+
+#timer_control_button:hover {
+    border-color: #8C8E92;
+}
+
+#timer_control_button:checked,
+#timer_control_button:pressed {
+    background-color: #1B1C1F;
+    border-color: #1B1C1F;
+}
+
+QSpinBox {
+    background-color: #0F1012;
+    border: 1px solid #1B1C1F;
+    border-radius: 6px;
+    padding: 4px 8px;
+    selection-background-color: #B89A72;
+    selection-color: #0A0A0A;
+    max-width: 120px;
+}
+
+QSpinBox:focus {
+    border-color: #B89A72;
+}
+
+/* Hidden via zero width: setButtonSymbols(NoButtons) collapses the text field once a border is styled. */
+QSpinBox::up-button,
+QSpinBox::down-button {
+    width: 0;
+    border: none;
+}
+
+QCheckBox {
+    spacing: 10px;
+}
+
+QCheckBox::indicator {
+    width: 16px;
+    height: 16px;
+    border: 1px solid #8C8E92;
+    border-radius: 4px;
+    background-color: #0F1012;
+}
+
+QCheckBox::indicator:checked {
+    background-color: #B89A72;
+    border-color: #B89A72;
+}
