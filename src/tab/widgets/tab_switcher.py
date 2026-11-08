@@ -25,7 +25,8 @@ class TabSwitcher(QWidget):
     ↑/→ or scrolling up moves the highlight right; ↓/← or scrolling down moves it left (wrapping).
     Enter, or a left click anywhere except on another tile, chooses the highlighted tab, so you
     can scroll then click without aiming. Clicking a tile chooses that tile. Esc or a right
-    click closes without choosing. The parent decides what opens it.
+    click closes without choosing. Tab (handled by the parent) enters the highlighted tab if
+    the highlight was moved, otherwise closes. The parent decides what opens it.
     """
 
     tab_chosen = Signal(int)
@@ -37,6 +38,7 @@ class TabSwitcher(QWidget):
         self.setObjectName("tab_switcher")
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self._accumulated_wheel_delta = 0
+        self._highlighted_index_when_opened = 0
 
         self._tile_group = QButtonGroup(self)
         self._tile_group.setExclusive(True)
@@ -65,11 +67,19 @@ class TabSwitcher(QWidget):
 
     def open_with_highlight_on(self, highlighted_index: int) -> None:
         self._tile_group.button(highlighted_index).setChecked(True)
+        self._highlighted_index_when_opened = highlighted_index
         self._accumulated_wheel_delta = 0
         self.setGeometry(self.parentWidget().rect())
         self.show()
         self.raise_()
         self.setFocus()
+
+    def choose_if_highlight_moved_else_close(self) -> None:
+        """Tab while open: enter the highlighted tab if the user moved to it, else just close."""
+        if self.highlighted_index != self._highlighted_index_when_opened:
+            self._choose(self.highlighted_index)
+        else:
+            self.close_without_choosing()
 
     def close_without_choosing(self) -> None:
         self.hide()

@@ -90,7 +90,7 @@ class MainScreen(QWidget):
 
     def _toggle_tab_switcher(self) -> None:
         if self._tab_switcher.isVisible():
-            self._tab_switcher.close_without_choosing()
+            self._tab_switcher.choose_if_highlight_moved_else_close()
             return
         current_view_is_in_switcher = self._content_area.currentWidget() is not self._profile_view
         highlighted_index = self._content_area.currentIndex() if current_view_is_in_switcher else 0
