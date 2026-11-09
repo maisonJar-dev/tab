@@ -65,6 +65,18 @@ def test_phase_cycle_takes_long_break_after_every_fourth_work_session() -> None:
     assert not pomodoro_timer.is_running
 
 
+def test_upcoming_phase_matches_the_phase_advanced_into() -> None:
+    pomodoro_timer, _, fake_clock = create_timer_with_fake_clock()
+    for _ in range(8):
+        predicted_phase = pomodoro_timer.upcoming_phase()
+        pomodoro_timer.start()
+        fake_clock.current_seconds += 60 * 60
+        assert pomodoro_timer.is_current_phase_finished()
+        pomodoro_timer.advance_phase_if_finished()
+        assert pomodoro_timer.current_phase is predicted_phase
+        assert not pomodoro_timer.is_current_phase_finished()
+
+
 def test_cycle_count_stays_full_during_long_break_then_resets() -> None:
     pomodoro_timer, _, fake_clock = create_timer_with_fake_clock()
     observed_cycle_counts = []

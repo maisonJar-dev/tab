@@ -102,6 +102,9 @@ class PomodoroTimer:
         self.current_phase = phase
         self.reset()
 
+    def is_current_phase_finished(self) -> bool:
+        return self.remaining_seconds_in_phase() <= 0
+
     def advance_phase_if_finished(self) -> bool:
         """Move to the next phase (stopped) once the current one ends. Returns True if it moved."""
         phase_overrun_seconds = (
@@ -109,17 +112,22 @@ class PomodoroTimer:
         )
         if phase_overrun_seconds < 0:
             return False
+        upcoming_phase = self.upcoming_phase()
         if self.current_phase is TimerPhase.WORK:
             self._remove_overrun_from_focus_totaliser(phase_overrun_seconds)
             self.completed_work_sessions += 1
-            is_long_break_due = self.completed_work_sessions % WORK_SESSIONS_BEFORE_LONG_BREAK == 0
-            self.current_phase = (
-                TimerPhase.LONG_BREAK if is_long_break_due else TimerPhase.SHORT_BREAK
-            )
-        else:
-            self.current_phase = TimerPhase.WORK
+        self.current_phase = upcoming_phase
         self.reset()
         return True
+
+    def upcoming_phase(self) -> TimerPhase:
+        """The phase that follows the current one when it finishes."""
+        if self.current_phase is not TimerPhase.WORK:
+            return TimerPhase.WORK
+        is_long_break_due = (
+            self.completed_work_sessions + 1
+        ) % WORK_SESSIONS_BEFORE_LONG_BREAK == 0
+        return TimerPhase.LONG_BREAK if is_long_break_due else TimerPhase.SHORT_BREAK
 
     def snapshot(self) -> TimerProgressSnapshot:
         return TimerProgressSnapshot(

@@ -1,11 +1,16 @@
 import math
+from collections.abc import Callable
+from pathlib import Path
 
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import Qt, QTimer, QUrl
+from PySide6.QtMultimedia import QSoundEffect
 from PySide6.QtWidgets import (
+    QApplication,
     QButtonGroup,
     QHBoxLayout,
     QLabel,
     QSizePolicy,
+    QSystemTrayIcon,
     QVBoxLayout,
     QWidget,
 )
@@ -24,10 +29,23 @@ FULL_PHASE_LABELS = ["Working", "Short Break", "Long Break"]
 ABBREVIATED_PHASE_LABELS = ["W", "S", "L"]
 CONTROL_ICON_SIZE_PIXELS = 20
 RESET_PRESS_FLASH_MILLISECONDS = 180  # a click can be shorter than a frame; hold :pressed visibly
+PHASE_END_NOTIFICATION_MILLISECONDS = 3000
+IN_WINDOW_NOTIFICATION_TOP_MARGIN_PIXELS = 24
+PHASE_END_SOUND_PATH = Path(__file__).parent.parent / "assets" / "ding_ding.wav"
+UPCOMING_PHASE_NOTIFICATION_MESSAGES = {
+    TimerPhase.WORK: "🥊 Get to work!",
+    TimerPhase.SHORT_BREAK: "🧠 Take a quick reset",
+    TimerPhase.LONG_BREAK: "☕ Reset",
+}
 
 
 class TimerView(QWidget):
-    """Phase picker with icon controls beneath it on the left; dial and countdown on the right."""
+    """Phase picker with icon controls beneath it on the left; dial and countdown on the right.
+
+    When a phase ends the timer pauses, a notification names the next phase and a ding plays;
+    the view holds on 00:00 while it shows, then moves to the next phase, stopped until Start.
+    The notification is a desktop one when the OS offers a system tray, else a toast in the window.
+    """
 
     def __init__(self, pomodoro_timer: PomodoroTimer, settings: PomodoroSettings) -> None:
         super().__init__()
@@ -95,6 +113,13 @@ class TimerView(QWidget):
         layout.addWidget(picker_and_controls_column)
         layout.addLayout(dial_and_countdown_layout, stretch=1)
 
+        self._is_phase_end_announcement_pending = False
+        self._show_phase_end_notification = self._choose_phase_end_notification_method()
+        if not PHASE_END_SOUND_PATH.is_file():
+            raise FileNotFoundError(f"Phase-end sound missing: {PHASE_END_SOUND_PATH}")
+        self._phase_end_sound_effect = QSoundEffect(self)
+        self._phase_end_sound_effect.setSource(QUrl.fromLocalFile(str(PHASE_END_SOUND_PATH)))
+
         self._display_refresh_timer = QTimer(self)
         self._display_refresh_timer.timeout.connect(self._refresh_display)
         self._display_refresh_timer.start(DISPLAY_REFRESH_INTERVAL_MILLISECONDS)
@@ -110,6 +135,56 @@ class TimerView(QWidget):
         control_button.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         return control_button
 
+    def _choose_phase_end_notification_method(self) -> Callable[[str], None]:
+        """Desktop notifications go through a tray icon in Qt; without a tray, toast in-window."""
+        is_desktop_notification_supported = (
+            QSystemTrayIcon.isSystemTrayAvailable() and QSystemTrayIcon.supportsMessages()
+        )
+        if not is_desktop_notification_supported:
+            self._in_window_notification_label = QLabel()
+            self._in_window_notification_label.setObjectName("in_window_notification_label")
+            self._in_window_notification_label.hide()
+            return self._show_in_window_notification
+        self._phase_end_tray_icon = QSystemTrayIcon(QApplication.windowIcon(), self)
+        self._phase_end_tray_icon.setToolTip("Tab")
+        self._phase_end_tray_icon.show()
+        return self._show_desktop_notification
+
+    def _show_desktop_notification(self, message: str) -> None:
+        self._phase_end_tray_icon.showMessage(
+            "Tab", message, QSystemTrayIcon.MessageIcon.NoIcon, PHASE_END_NOTIFICATION_MILLISECONDS
+        )
+
+    def _show_in_window_notification(self, message: str) -> None:
+        # Parented to the top-level window, not this view, so it shows whichever view is open.
+        top_level_window = self.window()
+        notification_label = self._in_window_notification_label
+        notification_label.setParent(top_level_window)
+        notification_label.setText(message)
+        notification_label.adjustSize()
+        notification_label.move(
+            (top_level_window.width() - notification_label.width()) // 2,
+            IN_WINDOW_NOTIFICATION_TOP_MARGIN_PIXELS,
+        )
+        notification_label.raise_()
+        notification_label.show()
+        QTimer.singleShot(PHASE_END_NOTIFICATION_MILLISECONDS, notification_label.hide)
+
+    def _announce_phase_end_then_advance(self) -> None:
+        self._is_phase_end_announcement_pending = True
+        self._pomodoro_timer.pause()
+        self._show_phase_end_notification(
+            UPCOMING_PHASE_NOTIFICATION_MESSAGES[self._pomodoro_timer.upcoming_phase()]
+        )
+        self._phase_end_sound_effect.play()
+        QTimer.singleShot(PHASE_END_NOTIFICATION_MILLISECONDS, self._advance_after_announcement)
+
+    def _advance_after_announcement(self) -> None:
+        # Reset or a phase pick during the hold leaves nothing finished, so this is a no-op then.
+        self._pomodoro_timer.advance_phase_if_finished()
+        self._is_phase_end_announcement_pending = False
+        self._refresh_display()
+
     def _flash_reset_button_as_pressed(self) -> None:
         self._reset_button.setDown(True)
         QTimer.singleShot(RESET_PRESS_FLASH_MILLISECONDS, lambda: self._reset_button.setDown(False))
@@ -124,7 +199,12 @@ class TimerView(QWidget):
         self._refresh_display()
 
     def _refresh_display(self) -> None:
-        self._pomodoro_timer.advance_phase_if_finished()
+        is_new_phase_end = (
+            self._pomodoro_timer.is_current_phase_finished()
+            and not self._is_phase_end_announcement_pending
+        )
+        if is_new_phase_end:
+            self._announce_phase_end_then_advance()
         # Read from the timer, not the last click: it also stops itself at a phase's end.
         running_state_button = (
             self._start_button if self._pomodoro_timer.is_running else self._pause_button

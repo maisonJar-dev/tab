@@ -94,6 +94,15 @@ QLabel {
     qproperty-selectionBandColor: #1B1C1F;
 }
 
+/* Phase-end toast, used only when the OS has no tray for desktop notifications */
+#in_window_notification_label {
+    background-color: #0F1012;
+    border: 1px solid #2B2D31;
+    border-radius: 12px;
+    padding: 12px 20px;
+    font-size: 16px;
+}
+
 #timer_countdown_label {
     font-family: "DejaVu Sans Mono", "Courier New", monospace;
     font-size: 40px;

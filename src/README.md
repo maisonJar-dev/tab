@@ -26,6 +26,9 @@ Uses the `src/` layout so tests run against the installed package, not stray fil
   - `rotary_picker.py`: drum-style scroll/drag picker; used for choosing the phase.
   - `theme_colors.py`: helpers that let QPainter widgets take their colours from `theme.qss`.
 - `tab/views/`: one widget per view: `workspace.py`, `timer_view.py`, `settings.py` (in the switcher) and `profile.py` (corner button).
+  - `timer_view.py` also owns phase-end alerts: the timer pauses, a desktop notification (via a
+    system-tray icon; an in-window toast if the OS has no tray) names the next phase and a ding
+    plays, then after a 3 s hold the view moves to that phase, stopped until the user presses Start.
 - `tab/core/`: pure Python logic with **no Qt imports**.
   - `timer.py`: Pomodoro state machine and `TimerProgressSnapshot` (the restorable state).
   - `stopwatch.py`: start/pause/reset timing on an injectable monotonic clock (timer and splash).
@@ -33,7 +36,7 @@ Uses the `src/` layout so tests run against the installed package, not stray fil
   - `config.py` / `progress.py`: load and save settings and timer progress.
   - `json_storage.py`: shared pydantic ⇄ JSON helpers; writes are atomic (temp file + rename).
 - `tab/styles/theme.qss`: the only place styling lives.
-- `tab/assets/`: shipped images; `tab_icon.svg` is the app icon (graffiti "T").
+- `tab/assets/`: shipped images and sounds; `tab_icon.svg` is the app icon (graffiti "T").
 
 ## How it connects
 Dependencies point one way: `__main__` → `app` → `screens` → `views`/`widgets` → `core`.
