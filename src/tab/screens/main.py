@@ -1,9 +1,10 @@
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QKeySequence, QResizeEvent, QShortcut, QShowEvent
+from PySide6.QtGui import QKeyEvent, QKeySequence, QResizeEvent, QShortcut, QShowEvent
 from PySide6.QtWidgets import QStackedWidget, QVBoxLayout, QWidget
 
 from tab.core.config import PomodoroSettings
 from tab.core.timer import PomodoroTimer
+from tab.views.duration_view import DurationView
 from tab.views.profile import ProfileView
 from tab.views.settings import SettingsView
 from tab.views.timer_view import TimerView
@@ -12,6 +13,7 @@ from tab.widgets.background import WallBackground
 from tab.widgets.tab_switcher import SwitcherEntry, TabSwitcher
 from tab.widgets.themed_icon_button import ThemedIconButton
 from tab.widgets.view_icons import (
+    paint_duration_icon,
     paint_profile_icon,
     paint_settings_icon,
     paint_timer_icon,
@@ -29,6 +31,10 @@ class MainScreen(QWidget):
     Ctrl+Tab / Ctrl+Shift+Tab move keyboard focus through the tabbable controls (focus policy
     TabFocus) of the open view; while the switcher is open they move its highlight instead.
     Plain Tab stays the switcher's key.
+
+    Space starts or pauses the open Timer or Duration view. It's handled in keyPressEvent, not
+    as a shortcut, so it only gets a Space nothing else used: a control focused with Ctrl+Tab
+    still presses on Space, and the open switcher (which passes Space up unused) is skipped.
     """
 
     def __init__(self, settings: PomodoroSettings, pomodoro_timer: PomodoroTimer) -> None:
@@ -38,7 +44,11 @@ class MainScreen(QWidget):
         switcher_entries_with_views: list[tuple[SwitcherEntry, QWidget]] = [
             (SwitcherEntry("Workspace", paint_workspace_icon), WorkspaceView()),
             (SwitcherEntry("Timer", paint_timer_icon), TimerView(pomodoro_timer, settings)),
-            (SwitcherEntry("Settings", paint_settings_icon), SettingsView(settings)),
+            (SwitcherEntry("Duration", paint_duration_icon), DurationView(pomodoro_timer)),
+            (
+                SwitcherEntry("Settings", paint_settings_icon),
+                SettingsView(settings, pomodoro_timer),
+            ),
         ]
 
         self._content_area = QStackedWidget()
@@ -93,6 +103,19 @@ class MainScreen(QWidget):
     def showEvent(self, show_event: QShowEvent) -> None:
         super().showEvent(show_event)
         self.setFocus()
+
+    def keyPressEvent(self, key_event: QKeyEvent) -> None:
+        open_view = self._content_area.currentWidget()
+        is_space_for_the_open_view = (
+            key_event.key() == Qt.Key.Key_Space
+            and not key_event.isAutoRepeat()  # holding Space toggles once, not on and off
+            and not self._tab_switcher.isVisible()
+            and isinstance(open_view, (TimerView, DurationView))
+        )
+        if is_space_for_the_open_view:
+            open_view.toggle_running()
+            return
+        super().keyPressEvent(key_event)
 
     def resizeEvent(self, resize_event: QResizeEvent) -> None:
         super().resizeEvent(resize_event)

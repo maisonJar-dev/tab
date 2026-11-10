@@ -13,6 +13,10 @@ class PomodoroSettings(BaseModel):
     short_break_duration_minutes: int = Field(default=5, ge=1)
     long_break_duration_minutes: int = Field(default=15, ge=1)
     use_abbreviated_phase_labels: bool = False
+    is_intro_sound_enabled: bool = True
+    is_phase_end_notification_enabled: bool = True
+    # Work phases and the duration share one clock (break time stays separate). Off by default.
+    is_work_linked_with_duration: bool = False
 
 
 def default_settings_file_path() -> Path:

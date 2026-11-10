@@ -15,6 +15,7 @@ from PySide6.QtGui import (
 from PySide6.QtMultimedia import QAudioOutput, QMediaPlayer
 from PySide6.QtWidgets import QWidget
 
+from tab.core.config import PomodoroSettings
 from tab.core.cube_to_word_animation import (
     TOTAL_DURATION_SECONDS,
     CubeToWordAnimation,
@@ -36,7 +37,8 @@ class SplashScreen(QWidget):
     """Plays the cube-to-"tab" intro and its soundtrack, then emits `continue_requested` 3 s
     after it ends.
 
-    Tab, Space or Enter emits it straight away, even mid-intro. The geometry lives in
+    Tab, Space or Enter emits it straight away, even mid-intro. The soundtrack is skipped when
+    the "Intro sound" setting is off (read each time the splash shows). The geometry lives in
     core.cube_to_word_animation; this widget only supplies the clock, paints and handles keys.
     """
 
@@ -44,8 +46,9 @@ class SplashScreen(QWidget):
 
     lineColor = theme_color_property("_line_color")
 
-    def __init__(self) -> None:
+    def __init__(self, settings: PomodoroSettings) -> None:
         super().__init__()
+        self._settings = settings
         self.setObjectName("splash_screen")
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground)
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
@@ -79,8 +82,9 @@ class SplashScreen(QWidget):
         self._intro_stopwatch.reset()
         self._intro_stopwatch.start()
         self._frame_timer.start()
-        self._intro_sound_player.setPosition(0)
-        self._intro_sound_player.play()
+        if self._settings.is_intro_sound_enabled:
+            self._intro_sound_player.setPosition(0)
+            self._intro_sound_player.play()
 
     def hideEvent(self, hide_event: QHideEvent) -> None:
         super().hideEvent(hide_event)

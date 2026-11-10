@@ -44,10 +44,13 @@ class TimerProgressSnapshot(BaseModel):
     # The day all-time stats began (or were last reset); None in files saved before it existed,
     # which then count from the day they're first loaded.
     all_time_stats_since_date: date | None = None
+    # The open-ended duration session in progress (0 when none); restored paused.
+    duration_elapsed_seconds: float = Field(default=0.0, ge=0)
 
 
 class PomodoroTimer:
-    """Pure Pomodoro state machine. Knows nothing about Qt; the UI polls it.
+    """Pure Pomodoro state machine, plus the open-ended duration session. Knows nothing about
+    Qt; the UI polls it.
 
     Phase durations are read from the shared settings on every query, so edits apply
     immediately. Focus time only counts while the timer runs in the WORK phase, into three
@@ -61,6 +64,23 @@ class PomodoroTimer:
 
     "Today" (focus seconds and completed work sessions) starts over whenever the local date
     changes, checked each time today's numbers are read, updated or saved.
+
+    The duration session is a count-up stopwatch that also counts as focus while it runs.
+    Finishing it counts as a completed session (today and all time, not the long-break cycle)
+    waiting for a rating. How it relates to the Pomodoro depends on the
+    `is_work_linked_with_duration` setting:
+
+    - Linked: during a WORK phase the two clocks move together; starting or pausing either
+      starts or pauses both, so work minutes count down the phase and add to the duration.
+      Starting the duration during a break ends the break and starts a fresh WORK phase with
+      it. Completing a session from either side (the phase running out, `complete_work_session`
+      or `finish_duration`) is one session: the phase moves on to its break and the duration
+      goes back to zero. The duration never runs during a break: starting or switching to one
+      pauses it.
+    - Separate: only one runs at a time; starting either pauses the other, and the duration's
+      Finish is its own session, leaving the Pomodoro alone.
+
+    Focus counts once whichever is running, and pauses only when nothing counts any more.
     """
 
     def __init__(
@@ -100,6 +120,8 @@ class PomodoroTimer:
         self.is_awaiting_session_rating = restored_progress.is_awaiting_session_rating
         self._session_rating_sum = restored_progress.session_rating_sum
         self._rated_work_sessions = restored_progress.rated_work_sessions
+        self._duration_stopwatch = Stopwatch(monotonic_clock_seconds)
+        self._duration_stopwatch.reset(restored_progress.duration_elapsed_seconds)
 
         self._today_date = local_date()
         self._completed_work_sessions_today = 0
@@ -110,6 +132,57 @@ class PomodoroTimer:
     @property
     def is_running(self) -> bool:
         return self._phase_stopwatch.is_running
+
+    @property
+    def is_duration_running(self) -> bool:
+        return self._duration_stopwatch.is_running
+
+    def duration_elapsed_seconds(self) -> float:
+        return self._duration_stopwatch.elapsed_seconds()
+
+    def start_duration(self) -> None:
+        if self._settings.is_work_linked_with_duration:
+            if self.current_phase is not TimerPhase.WORK:
+                self.switch_to_phase(TimerPhase.WORK)  # back to work: the break is over
+            self.start()  # starts both
+            return
+        self.pause()
+        self._start_new_day_if_date_changed()
+        self.is_awaiting_session_rating = False  # moved on without rating the last one
+        self._duration_stopwatch.start()
+        for focus_stopwatch in self._focus_stopwatches:
+            focus_stopwatch.start()
+
+    def pause_duration(self) -> None:
+        if not self.is_duration_running:
+            return
+        self._duration_stopwatch.pause()
+        if self._is_work_phase_linked_with_duration():
+            self._phase_stopwatch.pause()
+        self._pause_focus_unless_something_still_counts()
+
+    def reset_duration(self) -> None:
+        """The duration's Reset: back to zero, stopped, no session counted (focus time spent is
+        kept). Linked during a work phase, the phase restarts with it."""
+        if self._is_work_phase_linked_with_duration():
+            self.reset()
+        self.pause_duration()
+        self._duration_stopwatch.reset()
+
+    def finish_duration(self) -> None:
+        """End the duration session: it counts as a completed session waiting for a rating.
+        Linked to a WORK phase, it completes that work session too (one session, not two)."""
+        if self.duration_elapsed_seconds() <= 0:
+            raise ValueError("There's no duration session to finish: it hasn't been started")
+        if self._is_work_phase_linked_with_duration():
+            self._complete_work_session()
+            return
+        self.pause_duration()
+        self._start_new_day_if_date_changed()
+        self.completed_work_sessions += 1
+        self._completed_work_sessions_today += 1
+        self.is_awaiting_session_rating = True
+        self._duration_stopwatch.reset()
 
     def completed_work_sessions_in_current_cycle(self) -> int:
         """0 to WORK_SESSIONS_BEFORE_LONG_BREAK; stays full during the long break."""
@@ -163,6 +236,12 @@ class PomodoroTimer:
         self._rated_work_sessions += 1
         self.is_awaiting_session_rating = False
 
+    def skip_session_rating(self) -> None:
+        """Decline to rate the last session: the prompt goes and the Impact Score is unchanged."""
+        if not self.is_awaiting_session_rating:
+            raise ValueError("There's no finished session waiting for a rating to skip")
+        self.is_awaiting_session_rating = False
+
     def reset_all_time_stats(self) -> None:
         self.all_time_stats_since_date = self._local_date()
         self.completed_work_sessions = 0
@@ -172,6 +251,10 @@ class PomodoroTimer:
         self.is_awaiting_session_rating = False  # its session no longer counts
 
     def start(self) -> None:
+        if self._is_work_phase_linked_with_duration():
+            self._duration_stopwatch.start()
+        else:
+            self.pause_duration()
         self._start_new_day_if_date_changed()
         self._phase_stopwatch.start()
         if self.current_phase is TimerPhase.WORK:
@@ -180,15 +263,26 @@ class PomodoroTimer:
                 focus_stopwatch.start()
 
     def pause(self) -> None:
+        if not self.is_running:
+            return
         self._phase_stopwatch.pause()
-        for focus_stopwatch in self._focus_stopwatches:
-            focus_stopwatch.pause()
+        if self._is_work_phase_linked_with_duration():
+            self._duration_stopwatch.pause()
+        self._pause_focus_unless_something_still_counts()
 
     def reset(self) -> None:
         """Restart the current phase at full duration, stopped. Focus time spent is kept."""
+        self.pause()
         self._phase_stopwatch.reset()
-        for focus_stopwatch in self._focus_stopwatches:
-            focus_stopwatch.pause()
+
+    def reset_phase(self) -> None:
+        """The Timer's Reset: `reset`, and linked during a work phase the duration goes back to
+        zero with it."""
+        is_linked_now = self._is_work_phase_linked_with_duration()
+        self.reset()
+        if is_linked_now:
+            self.pause_duration()
+            self._duration_stopwatch.reset()
 
     def reset_focus_totaliser(self) -> None:
         """Zero the dial's totaliser only; focus today is kept."""
@@ -198,6 +292,8 @@ class PomodoroTimer:
         """Jump to a phase at its full duration, stopped. Doesn't count as a completed session."""
         self.current_phase = phase
         self.reset()
+        if self._settings.is_work_linked_with_duration and phase is not TimerPhase.WORK:
+            self.pause_duration()  # linked, the duration rests during breaks
 
     def is_current_phase_finished(self) -> bool:
         return self.remaining_seconds_in_phase() <= 0
@@ -209,17 +305,38 @@ class PomodoroTimer:
         )
         if phase_overrun_seconds < 0:
             return False
-        self._start_new_day_if_date_changed()
-        upcoming_phase = self.upcoming_phase()
         if self.current_phase is TimerPhase.WORK:
             self._remove_overrun_from_focus_stopwatches(phase_overrun_seconds)
-            self.completed_work_sessions += 1
-            self._work_sessions_counted_for_break_cycle += 1
-            self._completed_work_sessions_today += 1
-            self.is_awaiting_session_rating = True
+            self._complete_work_session()
+        else:
+            self.current_phase = self.upcoming_phase()
+            self.reset()
+        return True
+
+    def complete_work_session(self) -> None:
+        """End the WORK phase now, as if it had run out (the Timer's ✓): it counts as a
+        completed session and the phase moves on to its break, stopped."""
+        if self.current_phase is not TimerPhase.WORK:
+            raise ValueError(f"Only a work phase can be completed, not {self.current_phase.value}")
+        if self.elapsed_seconds_in_phase() <= 0:
+            raise ValueError("There's no work session to complete: it hasn't been started")
+        self._complete_work_session()
+
+    def _complete_work_session(self) -> None:
+        """One completed work session: counted once, rating requested, on to the break.
+        Linked, the duration it ran alongside ends with it and goes back to zero."""
+        self.pause()
+        self.pause_duration()
+        self._start_new_day_if_date_changed()
+        upcoming_phase = self.upcoming_phase()  # read before the cycle counter moves
+        self.completed_work_sessions += 1
+        self._work_sessions_counted_for_break_cycle += 1
+        self._completed_work_sessions_today += 1
+        self.is_awaiting_session_rating = True
+        if self._settings.is_work_linked_with_duration:
+            self._duration_stopwatch.reset()
         self.current_phase = upcoming_phase
         self.reset()
-        return True
 
     def upcoming_phase(self) -> TimerPhase:
         """The phase that follows the current one when it finishes."""
@@ -245,7 +362,27 @@ class PomodoroTimer:
             rated_work_sessions=self._rated_work_sessions,
             work_sessions_counted_for_break_cycle=self._work_sessions_counted_for_break_cycle,
             all_time_stats_since_date=self.all_time_stats_since_date,
+            duration_elapsed_seconds=self.duration_elapsed_seconds(),
         )
+
+    def set_work_linked_with_duration(self, is_linked: bool) -> None:
+        """Change the linking setting. Both clocks pause first, so neither carries on under
+        rules it wasn't started with; the user starts again under the new ones."""
+        self.pause()
+        self.pause_duration()
+        self._settings.is_work_linked_with_duration = is_linked
+
+    def _is_work_phase_linked_with_duration(self) -> bool:
+        return self._settings.is_work_linked_with_duration and self.current_phase is TimerPhase.WORK
+
+    def _pause_focus_unless_something_still_counts(self) -> None:
+        """Focus runs while a work phase or the duration runs; this keeps it honest when the
+        two were running together and only one stops (e.g. the setting changed mid-session)."""
+        is_work_phase_running = self.is_running and self.current_phase is TimerPhase.WORK
+        if is_work_phase_running or self.is_duration_running:
+            return
+        for focus_stopwatch in self._focus_stopwatches:
+            focus_stopwatch.pause()
 
     def _start_new_day_if_date_changed(self) -> None:
         """Zero today's counters at the first check after midnight; a running session keeps
@@ -260,11 +397,15 @@ class PomodoroTimer:
     def _remove_overrun_from_focus_stopwatches(self, phase_overrun_seconds: float) -> None:
         """The UI polls, so a phase is noticed slightly after it ends; don't count that gap."""
         for focus_stopwatch in self._focus_stopwatches:
+            # Keeps the run state: a duration started during the phase-end hold keeps counting.
+            was_running = focus_stopwatch.is_running
             focus_stopwatch.pause()
             trimmed_focus_seconds = max(
                 0.0, focus_stopwatch.elapsed_seconds() - phase_overrun_seconds
             )
             focus_stopwatch.reset(trimmed_focus_seconds)
+            if was_running:
+                focus_stopwatch.start()
 
 
 def _restart_from_zero_keeping_run_state(stopwatch: Stopwatch) -> None:
@@ -272,6 +413,17 @@ def _restart_from_zero_keeping_run_state(stopwatch: Stopwatch) -> None:
     stopwatch.reset()
     if was_running:
         stopwatch.start()
+
+
+def format_clock_time(whole_seconds: int) -> str:
+    """MM:SS under an hour, H:MM:SS from an hour up (2:00:00 rather than 120:00)."""
+    if whole_seconds < 0:
+        raise ValueError(f"Clock time can't be negative, got {whole_seconds} s")
+    hours, seconds_within_hour = divmod(whole_seconds, 3600)
+    minutes, seconds = divmod(seconds_within_hour, 60)
+    if hours:
+        return f"{hours}:{minutes:02d}:{seconds:02d}"
+    return f"{minutes:02d}:{seconds:02d}"
 
 
 def lap_fractions_from_current_lap(

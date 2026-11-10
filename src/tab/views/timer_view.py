@@ -5,12 +5,12 @@ from collections.abc import Callable
 from pathlib import Path
 
 from PySide6.QtCore import Qt, QTimer, QUrl
+from PySide6.QtGui import QResizeEvent, QShowEvent
 from PySide6.QtMultimedia import QAudioOutput, QMediaPlayer
 from PySide6.QtWidgets import (
     QApplication,
     QHBoxLayout,
     QLabel,
-    QPushButton,
     QSizePolicy,
     QSystemTrayIcon,
     QVBoxLayout,
@@ -18,12 +18,19 @@ from PySide6.QtWidgets import (
 )
 
 from tab.core.config import PomodoroSettings
-from tab.core.timer import SESSION_RATINGS, PomodoroTimer, TimerPhase
+from tab.core.timer import PomodoroTimer, TimerPhase, format_clock_time
 from tab.widgets.chronograph_dial import MECHANICAL_BEATS_PER_SECOND, ChronographDial
+from tab.widgets.info_article import create_info_button
 from tab.widgets.rotary_picker import SELECTION_BAND_INSET_PIXELS as PHASE_PICKER_BAND_INSET_PIXELS
 from tab.widgets.rotary_picker import RotaryPicker
+from tab.widgets.session_rating_row import SessionRatingRow
 from tab.widgets.themed_icon_button import PaintIcon, ThemedIconButton
-from tab.widgets.view_icons import paint_pause_icon, paint_reset_icon, paint_start_icon
+from tab.widgets.view_icons import (
+    paint_finish_icon,
+    paint_pause_icon,
+    paint_reset_icon,
+    paint_start_icon,
+)
 
 DISPLAY_REFRESH_INTERVAL_MILLISECONDS = 1000 // MECHANICAL_BEATS_PER_SECOND
 PHASES_IN_PICKER_ORDER = [TimerPhase.WORK, TimerPhase.SHORT_BREAK, TimerPhase.LONG_BREAK]
@@ -36,6 +43,9 @@ IN_WINDOW_NOTIFICATION_TOP_MARGIN_PIXELS = 24
 PHASE_END_SOUND_PATH = Path(__file__).parent.parent / "assets" / "swoosh_snap.wav"
 # tab.app also names this file; importing it from here would be circular (app imports the views).
 NOTIFICATION_ICON_PATH = Path(__file__).parent.parent / "assets" / "tab_icon.svg"
+POMODORO_INFO_ARTICLE_PATH = Path(__file__).parent.parent / "assets" / "pomodoro_technique.md"
+# From the countdown's last digit to the "i": the same gap as beside the Duration clock.
+INFO_BUTTON_GAP_FROM_COUNTDOWN_PIXELS = 36
 FREEDESKTOP_NOTIFICATIONS_SERVICE = "org.freedesktop.Notifications"
 NORMAL_NOTIFICATION_URGENCY = 1  # 0 low (GNOME lists it without a banner), 1 normal, 2 critical
 DBUS_REPLY_TIMEOUT_SECONDS = 2
@@ -49,9 +59,9 @@ UPCOMING_PHASE_NOTIFICATION_MESSAGES = {
 class TimerView(QWidget):
     """Phase picker with icon controls beneath it on the left; dial and countdown on the right.
 
-    When a phase ends the timer pauses, a notification names the next phase and the swoosh snap
-    plays; the view holds on 00:00 while it shows, then moves to the next phase, stopped until
-    Start.
+    When a phase ends the timer pauses, a notification names the next phase (unless turned off
+    in Settings) and the swoosh snap plays; the view holds on 00:00 for the notification's
+    length, then moves to the next phase, stopped until Start.
     The notification goes straight to the freedesktop notification service over D-Bus on Linux
     (Qt's tray sends it as low urgency, which GNOME files away without a banner), through the
     system tray elsewhere, and as a toast in the window when there's neither.
@@ -89,7 +99,7 @@ class TimerView(QWidget):
         )
         self._start_button.clicked.connect(self._pomodoro_timer.start)
         self._pause_button.clicked.connect(self._pomodoro_timer.pause)
-        self._reset_button.clicked.connect(self._pomodoro_timer.reset)
+        self._reset_button.clicked.connect(self._pomodoro_timer.reset_phase)
         self._reset_button.clicked.connect(self._flash_reset_button_as_pressed)
         for control_button in (self._start_button, self._pause_button, self._reset_button):
             control_button.clicked.connect(self._refresh_display)
@@ -107,7 +117,22 @@ class TimerView(QWidget):
         picker_and_controls_layout.addStretch()
         picker_and_controls_layout.addWidget(self._phase_picker)
         picker_and_controls_layout.addLayout(control_button_row_layout)
-        self._session_rating_row = self._create_session_rating_row()
+        # ✓ under Start/Pause/Reset, spanning the row: end the work session now.
+        self._complete_session_button = self._create_control_button(
+            "Complete session", paint_finish_icon, is_checkable=False
+        )
+        self._complete_session_button.setProperty("controlRole", "complete_session")  # green hover
+        self._complete_session_button.clicked.connect(self._complete_work_session)
+        complete_session_row_layout = QHBoxLayout()
+        complete_session_row_layout.setContentsMargins(
+            PHASE_PICKER_BAND_INSET_PIXELS, 0, PHASE_PICKER_BAND_INSET_PIXELS, 0
+        )
+        complete_session_row_layout.addWidget(self._complete_session_button)
+        picker_and_controls_layout.addLayout(complete_session_row_layout)
+        # Shown during the break after a work session, until it's rated or the next one starts.
+        self._session_rating_row = SessionRatingRow(PHASE_PICKER_BAND_INSET_PIXELS)
+        self._session_rating_row.rating_chosen.connect(self._rate_last_work_session)
+        self._session_rating_row.rating_skipped.connect(self._skip_session_rating)
         picker_and_controls_layout.addWidget(self._session_rating_row)
         picker_and_controls_layout.addStretch()
 
@@ -130,9 +155,47 @@ class TimerView(QWidget):
         self._phase_end_sound_player.setAudioOutput(QAudioOutput(self))
         self._phase_end_sound_player.setSource(QUrl.fromLocalFile(str(PHASE_END_SOUND_PATH)))
 
+        self._pomodoro_info_button = create_info_button(
+            "The Pomodoro Technique", POMODORO_INFO_ARTICLE_PATH, parent=self
+        )
+
         self._display_refresh_timer = QTimer(self)
         self._display_refresh_timer.timeout.connect(self._refresh_display)
         self._display_refresh_timer.start(DISPLAY_REFRESH_INTERVAL_MILLISECONDS)
+        self._refresh_display()
+
+    def showEvent(self, show_event: QShowEvent) -> None:
+        super().showEvent(show_event)
+        self._place_info_button_beside_countdown()  # the layout has run by now
+
+    def resizeEvent(self, resize_event: QResizeEvent) -> None:
+        super().resizeEvent(resize_event)
+        self._place_info_button_beside_countdown()
+
+    def _place_info_button_beside_countdown(self) -> None:
+        """On the countdown's row, vertically centred on it, a fixed gap after its last digit;
+        it floats over the layout, so the countdown stays centred under the dial."""
+        info_button = self._pomodoro_info_button
+        info_button.adjustSize()
+        countdown_geometry = self._countdown_label.geometry()
+        countdown_text_width = self._countdown_label.fontMetrics().horizontalAdvance(
+            self._countdown_label.text()
+        )
+        icon_inset_pixels = (info_button.width() - info_button.iconSize().width()) // 2
+        info_button.move(
+            round(countdown_geometry.center().x() + countdown_text_width / 2)
+            + INFO_BUTTON_GAP_FROM_COUNTDOWN_PIXELS
+            - icon_inset_pixels,
+            countdown_geometry.center().y() - info_button.height() // 2,
+        )
+        info_button.raise_()
+
+    def toggle_running(self) -> None:
+        """Start if paused, pause if running: what Space does while this view is open."""
+        if self._pomodoro_timer.is_running:
+            self._pomodoro_timer.pause()
+        else:
+            self._pomodoro_timer.start()
         self._refresh_display()
 
     def _create_control_button(
@@ -220,9 +283,10 @@ class TimerView(QWidget):
     def _announce_phase_end_then_advance(self) -> None:
         self._is_phase_end_announcement_pending = True
         self._pomodoro_timer.pause()
-        self._show_phase_end_notification(
-            UPCOMING_PHASE_NOTIFICATION_MESSAGES[self._pomodoro_timer.upcoming_phase()]
-        )
+        if self._settings.is_phase_end_notification_enabled:
+            self._show_phase_end_notification(
+                UPCOMING_PHASE_NOTIFICATION_MESSAGES[self._pomodoro_timer.upcoming_phase()]
+            )
         self._phase_end_sound_player.play()
         QTimer.singleShot(PHASE_END_NOTIFICATION_MILLISECONDS, self._advance_after_announcement)
 
@@ -232,38 +296,13 @@ class TimerView(QWidget):
         self._is_phase_end_announcement_pending = False
         self._refresh_display()
 
-    def _create_session_rating_row(self) -> QWidget:
-        """Shown during the break after a work session, until it's rated or the next one starts."""
-        session_rating_row = QWidget()
-        # Keep its space while hidden, so the picker and controls don't jump when it appears.
-        session_rating_size_policy = session_rating_row.sizePolicy()
-        session_rating_size_policy.setRetainSizeWhenHidden(True)
-        session_rating_row.setSizePolicy(session_rating_size_policy)
+    def _complete_work_session(self) -> None:
+        self._pomodoro_timer.complete_work_session()
+        self._refresh_display()
 
-        session_rating_prompt = QLabel("Rate that session")
-        session_rating_prompt.setObjectName("session_rating_prompt")
-        session_rating_prompt.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        rating_button_row_layout = QHBoxLayout()
-        rating_button_row_layout.setSpacing(6)
-        for rating in SESSION_RATINGS:
-            rating_button = QPushButton(str(rating))
-            rating_button.setObjectName("session_rating_button")
-            rating_button.setAccessibleName(f"Rate session {rating}")
-            rating_button.setFocusPolicy(Qt.FocusPolicy.TabFocus)
-            rating_button.setCursor(Qt.CursorShape.PointingHandCursor)
-            rating_button.clicked.connect(
-                lambda _checked=False, rating=rating: self._rate_last_work_session(rating)
-            )
-            rating_button_row_layout.addWidget(rating_button)
-
-        session_rating_layout = QVBoxLayout(session_rating_row)
-        session_rating_layout.setContentsMargins(
-            PHASE_PICKER_BAND_INSET_PIXELS, 16, PHASE_PICKER_BAND_INSET_PIXELS, 0
-        )
-        session_rating_layout.setSpacing(8)
-        session_rating_layout.addWidget(session_rating_prompt)
-        session_rating_layout.addLayout(rating_button_row_layout)
-        return session_rating_row
+    def _skip_session_rating(self) -> None:
+        self._pomodoro_timer.skip_session_rating()
+        self._refresh_display()
 
     def _rate_last_work_session(self, rating: int) -> None:
         self._pomodoro_timer.rate_last_work_session(rating)
@@ -295,6 +334,11 @@ class TimerView(QWidget):
         self._start_button.setChecked(self._pomodoro_timer.is_running)
         self._pause_button.setChecked(not self._pomodoro_timer.is_running)
         self._session_rating_row.setVisible(self._pomodoro_timer.is_awaiting_session_rating)
+        self._complete_session_button.setEnabled(
+            self._pomodoro_timer.current_phase is TimerPhase.WORK
+            and self._pomodoro_timer.elapsed_seconds_in_phase() > 0
+            and not self._is_phase_end_announcement_pending
+        )
         self._phase_picker.set_item_labels(self._phase_labels_for_current_settings())
         self._phase_picker.set_selected_index(
             PHASES_IN_PICKER_ORDER.index(self._pomodoro_timer.current_phase)
@@ -306,16 +350,11 @@ class TimerView(QWidget):
             focus_totaliser_seconds=self._pomodoro_timer.focus_totaliser_seconds(),
         )
         remaining_whole_seconds = math.ceil(self._pomodoro_timer.remaining_seconds_in_phase())
-        self._countdown_label.setText(_format_countdown(remaining_whole_seconds))
-
-
-def _format_countdown(remaining_whole_seconds: int) -> str:
-    """MM:SS under an hour, H:MM:SS from an hour up (2:00:00 rather than 120:00)."""
-    hours, seconds_within_hour = divmod(remaining_whole_seconds, 3600)
-    minutes, seconds = divmod(seconds_within_hour, 60)
-    if hours:
-        return f"{hours}:{minutes:02d}:{seconds:02d}"
-    return f"{minutes:02d}:{seconds:02d}"
+        countdown_text = format_clock_time(remaining_whole_seconds)
+        is_countdown_width_changing = len(countdown_text) != len(self._countdown_label.text())
+        self._countdown_label.setText(countdown_text)
+        if is_countdown_width_changing:  # 1:00:00 ↔ 59:59: keep the "i" beside the last digit
+            self._place_info_button_beside_countdown()
 
 
 def _is_freedesktop_notification_service_running() -> bool:

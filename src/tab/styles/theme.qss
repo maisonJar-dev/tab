@@ -10,9 +10,11 @@
  *   bone       #F5F1F1   primary text, major markings, control icons
  *   tan        #B89A72   primary accent: dial hands and arc, selected icons and phase, focus rings,
  *                        checked fills, values being edited
- *   baby blue  #89CFF0   secondary accent: section headings (callout card titles). Cool against
- *                        tan's warmth, so headings and values never read as the same thing.
+ *   baby blue  #89CFF0   secondary accent: section headings (callout card titles), and the
+ *                        "i" buttons under the mouse. Cool against tan's warmth, so headings
+ *                        and values never read as the same thing.
  *   red        #E5484D   destructive actions only (outline and text of buttons that erase data)
+ *   green      #3DD68C   completing a session only (the ✓ buttons' outline and icon on hover)
  *
  * Contrast rule: tan is ~7.5:1 on black, so it works as lines and as fills. Baby blue is ~11:1.
  * Text on a tan fill is black.
@@ -55,7 +57,9 @@ QLabel {
     border-radius: 10px;
     padding: 16px;
     qproperty-iconColor: #8C8E92;
+    qproperty-hoverIconColor: #8C8E92;
     qproperty-selectedIconColor: #B89A72;
+    qproperty-disabledIconColor: #2B2D31;
 }
 
 #tab_switcher_tile:checked {
@@ -68,11 +72,59 @@ QLabel {
     border-radius: 8px;
     padding: 8px;
     qproperty-iconColor: #8C8E92;
+    qproperty-hoverIconColor: #8C8E92;
     qproperty-selectedIconColor: #B89A72;
+    qproperty-disabledIconColor: #2B2D31;
 }
 
 #profile_corner_button:hover {
     background-color: #1B1C1F;
+}
+
+/* The "i" beside the Timer's and Duration's clocks: styled like the Profile corner button. */
+#info_button {
+    background-color: transparent;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    padding: 8px;
+    qproperty-iconColor: #8C8E92;
+    qproperty-hoverIconColor: #89CFF0; /* baby blue, like Settings' headings */
+    qproperty-selectedIconColor: #B89A72;
+    qproperty-disabledIconColor: #2B2D31;
+}
+
+#info_button:hover {
+    background-color: #1B1C1F;
+}
+
+/* The short read it opens (widgets/info_article.py) */
+#info_article_dialog {
+    background-color: #0F1012;
+    qproperty-headingColor: #89CFF0;
+}
+
+#info_article {
+    background-color: transparent;
+    border: none;
+    font-size: 15px;
+    selection-background-color: #B89A72;
+    selection-color: #0A0A0A;
+}
+
+#info_article QScrollBar:vertical {
+    background: transparent;
+    width: 8px;
+}
+
+#info_article QScrollBar::handle:vertical {
+    background: #2B2D31;
+    border-radius: 4px;
+    min-height: 32px;
+}
+
+#info_article QScrollBar::add-line:vertical,
+#info_article QScrollBar::sub-line:vertical {
+    height: 0;
 }
 
 /* Views */
@@ -133,7 +185,14 @@ QLabel {
     font-size: 16px;
 }
 
-#timer_countdown_label {
+/* Duration view's knot: dots shaded from far (dim tan) to near (tan), so crossings read. */
+#duration_knot {
+    qproperty-nearColor: #B89A72;
+    qproperty-farColor: #4A3E2E;
+}
+
+#timer_countdown_label,
+#duration_elapsed_label {
     font-family: "DejaVu Sans Mono", "Courier New", monospace;
     font-size: 40px;
 }
@@ -171,7 +230,9 @@ QPushButton:pressed {
     border-radius: 10px;
     padding: 9px 0;
     qproperty-iconColor: #8C8E92;
+    qproperty-hoverIconColor: #8C8E92;
     qproperty-selectedIconColor: #B89A72;
+    qproperty-disabledIconColor: #2B2D31;
 }
 
 #timer_control_button:hover {
@@ -184,8 +245,24 @@ QPushButton:pressed {
     border-color: #1B1C1F;
 }
 
-/* Session rating (timer view, during the break after a work session): small chips in the
-   timer controls' style; the number turns tan on hover. */
+/* The ✓ buttons (Timer's complete session, Duration's Finish): the same hover as the other
+   controls, in green. More specific than :focus below, so hovering a focused ✓ stays green. */
+#timer_control_button[controlRole="complete_session"]:hover:enabled {
+    border-color: #3DD68C;
+}
+
+/* …and their ✓ turns green with it (no pseudo-state: qproperties apply once) */
+#timer_control_button[controlRole="complete_session"] {
+    qproperty-hoverIconColor: #3DD68C;
+}
+
+/* A ✓ with nothing to complete yet: outline and icon (disabledIconColor) fade together */
+#timer_control_button:disabled {
+    border-color: #1B1C1F;
+}
+
+/* Session rating (timer view during the break after a work session, duration view after
+   Finish): small chips in the timer controls' style; the number turns tan on hover. */
 #session_rating_prompt {
     color: #8C8E92;
     font-size: 12px;
@@ -206,6 +283,22 @@ QPushButton:pressed {
 }
 
 #session_rating_button:pressed {
+    background-color: #1B1C1F;
+}
+
+/* The small × beside the prompt that skips rating */
+#session_rating_skip_button {
+    background-color: transparent;
+    border: 1px solid transparent; /* reserves the focus ring's width */
+    border-radius: 6px;
+    padding: 5px; /* with the 14 px icon, a 26 px target that's easy to hit */
+    qproperty-iconColor: #8C8E92;
+    qproperty-hoverIconColor: #8C8E92;
+    qproperty-selectedIconColor: #8C8E92;
+    qproperty-disabledIconColor: #2B2D31;
+}
+
+#session_rating_skip_button:hover {
     background-color: #1B1C1F;
 }
 
@@ -273,8 +366,10 @@ QCheckBox::indicator:checked {
    equally specific states like :checked.
    Only TabFocus controls get focus, so clicks never show it. */
 #profile_corner_button:focus,
+#info_button:focus,
 #timer_control_button:focus,
 #session_rating_button:focus,
+#session_rating_skip_button:focus,
 QPushButton:focus {
     border-color: #B89A72;
 }

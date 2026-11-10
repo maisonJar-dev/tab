@@ -16,6 +16,27 @@ def test_save_then_load_round_trips(tmp_path: Path) -> None:
     assert load_settings(settings_file_path).work_duration_minutes == 40
 
 
+def test_files_saved_before_the_sound_and_notification_settings_keep_them_on(
+    tmp_path: Path,
+) -> None:
+    settings_file_path = tmp_path / "settings.json"
+    settings_file_path.write_text('{"work_duration_minutes": 30}')
+    loaded_settings = load_settings(settings_file_path)
+    assert loaded_settings.is_intro_sound_enabled
+    assert loaded_settings.is_phase_end_notification_enabled
+
+
+def test_sound_and_notification_settings_round_trip(tmp_path: Path) -> None:
+    settings_file_path = tmp_path / "settings.json"
+    save_settings(
+        PomodoroSettings(is_intro_sound_enabled=False, is_phase_end_notification_enabled=False),
+        settings_file_path,
+    )
+    loaded_settings = load_settings(settings_file_path)
+    assert not loaded_settings.is_intro_sound_enabled
+    assert not loaded_settings.is_phase_end_notification_enabled
+
+
 def test_invalid_file_raises_instead_of_falling_back(tmp_path: Path) -> None:
     settings_file_path = tmp_path / "settings.json"
     settings_file_path.write_text('{"work_duration_minutes": 0}')

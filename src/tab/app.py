@@ -35,7 +35,7 @@ class TabApplicationWindow(QMainWindow):
         self.resize(INITIAL_WINDOW_WIDTH_PIXELS, INITIAL_WINDOW_HEIGHT_PIXELS)
 
         self._pomodoro_timer = PomodoroTimer(settings, load_timer_progress())
-        self._splash_screen = SplashScreen()
+        self._splash_screen = SplashScreen(settings)
         self._main_screen = MainScreen(settings, self._pomodoro_timer)
 
         self._screen_stack = QStackedWidget()

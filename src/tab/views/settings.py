@@ -9,6 +9,7 @@ from PySide6.QtWidgets import (
 )
 
 from tab.core.config import PomodoroSettings, save_settings
+from tab.core.timer import PomodoroTimer
 from tab.widgets.callout_card import (
     create_callout_card,
     create_callout_card_row,
@@ -124,11 +125,15 @@ class DurationPicker(QWidget):
 
 
 class SettingsView(QWidget):
-    """Stacked callout cards: one per phase duration, then General. Saves on every change."""
+    """Stacked callout cards: one per phase duration, then General. Saves on every change.
 
-    def __init__(self, settings: PomodoroSettings) -> None:
+    Toggling "Link work and duration" goes through the timer, which pauses both clocks.
+    """
+
+    def __init__(self, settings: PomodoroSettings, pomodoro_timer: PomodoroTimer) -> None:
         super().__init__()
         self._settings = settings
+        self._pomodoro_timer = pomodoro_timer
 
         page_layout = QVBoxLayout(self)
         page_layout.setContentsMargins(32, 32, 32, 32)
@@ -155,11 +160,40 @@ class SettingsView(QWidget):
                 "use_abbreviated_phase_labels", is_checked
             )
         )
+        intro_sound_checkbox = QCheckBox("On")
+        intro_sound_checkbox.setFocusPolicy(Qt.FocusPolicy.TabFocus)
+        intro_sound_checkbox.setChecked(self._settings.is_intro_sound_enabled)
+        intro_sound_checkbox.toggled.connect(
+            lambda is_checked: self._update_and_save_setting("is_intro_sound_enabled", is_checked)
+        )
+        phase_end_notification_checkbox = QCheckBox("On")
+        phase_end_notification_checkbox.setFocusPolicy(Qt.FocusPolicy.TabFocus)
+        phase_end_notification_checkbox.setChecked(self._settings.is_phase_end_notification_enabled)
+        phase_end_notification_checkbox.toggled.connect(
+            lambda is_checked: self._update_and_save_setting(
+                "is_phase_end_notification_enabled", is_checked
+            )
+        )
+        link_work_with_duration_checkbox = QCheckBox("On")
+        link_work_with_duration_checkbox.setFocusPolicy(Qt.FocusPolicy.TabFocus)
+        link_work_with_duration_checkbox.setChecked(self._settings.is_work_linked_with_duration)
+        link_work_with_duration_checkbox.toggled.connect(self._change_work_duration_linking)
         general_card_layout = QVBoxLayout()
         general_card_layout.setSpacing(12)
         general_card_layout.addWidget(create_callout_card_title("General"))
         general_card_layout.addLayout(
             create_callout_card_row(QLabel("Phase labels"), abbreviate_phase_labels_checkbox)
+        )
+        general_card_layout.addLayout(
+            create_callout_card_row(QLabel("Intro sound"), intro_sound_checkbox)
+        )
+        general_card_layout.addLayout(
+            create_callout_card_row(QLabel("Notifications"), phase_end_notification_checkbox)
+        )
+        general_card_layout.addLayout(
+            create_callout_card_row(
+                QLabel("Link work and duration"), link_work_with_duration_checkbox
+            )
         )
         page_layout.addWidget(
             create_callout_card(general_card_layout), alignment=Qt.AlignmentFlag.AlignLeft
@@ -172,6 +206,10 @@ class SettingsView(QWidget):
             lambda new_minutes: self._update_and_save_setting(settings_field_name, new_minutes)
         )
         return duration_picker
+
+    def _change_work_duration_linking(self, is_linked: bool) -> None:
+        self._pomodoro_timer.set_work_linked_with_duration(is_linked)
+        save_settings(self._settings)
 
     def _update_and_save_setting(self, settings_field_name: str, new_value: int | bool) -> None:
         setattr(self._settings, settings_field_name, new_value)

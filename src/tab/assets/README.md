@@ -1,7 +1,7 @@
 # assets
 
 ## Purpose
-Image and sound files the app ships with.
+Image, sound and text files the app ships with.
 
 ## Contents
 - `tab_icon.svg`: the app icon, a bone-white capital T shaped like two brush strokes (round loaded
@@ -19,13 +19,27 @@ Image and sound files the app ships with.
   sound and never reuses its snap. Synthesised and saturated (tanh) so the low end carries on
   laptop speakers; mono 44.1 kHz. **Regenerate it if those animation timings change.**
 
+- `trefoil_knot.md`: the ~5 minute read behind the Duration view's "i" button: what a mathematical
+  knot is, tricolourability as a proof, handedness, the formulas the animation uses, Kelvin's
+  vortex atoms, knot counts, uses in DNA, physics and computing, and open problems. Written as
+  general-audience maths (no references to the app). Rendered as Markdown by Qt.
+
+- `pomodoro_technique.md`: the ~5 minute read behind the Timer view's "i": where the technique
+  came from, how it works, why (procrastination, the vigilance decrement, learning during
+  breaks), what the evidence does and doesn't show, the planning fallacy, and variations.
+  General-audience, no references to the app.
+
 ## How it connects
 `app.py` exposes `APP_ICON_PATH`; `__main__.py` sets it as the application's window icon.
 `widgets/background.py` loads `background.svg` by path.
 `views/timer_view.py` loads `swoosh_snap.wav` by path.
+`views/duration_view.py` loads `trefoil_knot.md` and `views/timer_view.py` loads
+`pomodoro_technique.md` by path; `widgets/info_article.py` renders them.
 `screens/splash.py` loads `splash_intro.wav` by path.
 Packaged automatically with `src/tab` by hatchling.
 
 ## Conventions
 - Prefer SVG for images so they stay sharp at every size and can be edited as text.
+- Long-form text lives here as Markdown, not as strings in Python, so it can be edited as prose.
+  Stick to what Qt's Markdown renders: headings, paragraphs, bold/italic, lists, block quotes.
 - Colours from the palette in `styles/theme.qss` (black, bone, tan, the greys) or shades of them.
