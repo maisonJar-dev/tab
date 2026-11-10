@@ -11,16 +11,21 @@ from PySide6.QtWidgets import (
 from tab.core.config import PomodoroSettings, save_settings
 from tab.core.timer import PomodoroTimer
 from tab.widgets.callout_card import (
+    CALLOUT_CARD_WIDTH_PIXELS,
     create_callout_card,
     create_callout_card_row,
     create_callout_card_title,
 )
 from tab.widgets.rotary_picker import ITEM_SPACING_PIXELS, RotaryPicker
+from tab.widgets.themed_icon_button import ThemedIconButton
+from tab.widgets.view_icons import paint_shortcuts_icon
 
 MAXIMUM_DURATION_HOURS = 3
 MINIMUM_DURATION_MINUTES = 1
 DURATION_DRUM_WIDTH_PIXELS = 64
 COLLAPSED_DRUM_HEIGHT_PIXELS = ITEM_SPACING_PIXELS  # just the selection band: the picked number
+SHORTCUTS_BUTTON_ICON_SIZE_PIXELS = 24  # same as the Profile button
+SHORTCUTS_CARD_GAP_PIXELS = 12  # the gap between stacked cards
 EXPANDED_DRUM_HEIGHT_PIXELS = 156  # the whole visible drum: no item is cut at the edges
 DRUM_EXPAND_ANIMATION_MILLISECONDS = 160
 
@@ -125,10 +130,15 @@ class DurationPicker(QWidget):
 
 
 class SettingsView(QWidget):
-    """Stacked callout cards: one per phase duration, then General. Saves on every change.
+    """Stacked callout cards: one per phase duration, then General, then Shortcuts. Saves on
+    every change.
 
     Toggling "Link work and duration" goes through the timer, which pauses both clocks.
+    The square ⌘ button beside the Shortcuts title card emits
+    `shortcuts_page_requested`; the main screen opens the page.
     """
+
+    shortcuts_page_requested = Signal()
 
     def __init__(self, settings: PomodoroSettings, pomodoro_timer: PomodoroTimer) -> None:
         super().__init__()
@@ -198,6 +208,37 @@ class SettingsView(QWidget):
         page_layout.addWidget(
             create_callout_card(general_card_layout), alignment=Qt.AlignmentFlag.AlignLeft
         )
+
+        shortcuts_button = ThemedIconButton(
+            "Shortcuts (Ctrl+S)",
+            paint_shortcuts_icon,
+            SHORTCUTS_BUTTON_ICON_SIZE_PIXELS,
+            is_checkable=False,
+        )
+        shortcuts_button.setObjectName("settings_shortcuts_button")
+        shortcuts_button.setFocusPolicy(Qt.FocusPolicy.TabFocus)
+        shortcuts_button.clicked.connect(self.shortcuts_page_requested.emit)
+        shortcuts_title_card_layout = QVBoxLayout()
+        shortcuts_title_card_layout.addWidget(create_callout_card_title("Shortcuts"))
+        shortcuts_title_card = create_callout_card(shortcuts_title_card_layout)
+        # A square as tall as the title card; together they span one card's width, so the
+        # button's right edge lines up with the cards above.
+        shortcuts_title_card.ensurePolished()  # theme.qss font sizes feed the height
+        # Rounded up to even: the 24 px icon then has equal space on each side (on an odd side
+        # Qt splits the leftover unevenly and the icon sits half a pixel off centre).
+        title_card_height_pixels = shortcuts_title_card.sizeHint().height()
+        shortcuts_button_side_pixels = title_card_height_pixels + title_card_height_pixels % 2
+        shortcuts_title_card.setFixedHeight(shortcuts_button_side_pixels)
+        shortcuts_button.setFixedSize(shortcuts_button_side_pixels, shortcuts_button_side_pixels)
+        shortcuts_title_card.setFixedWidth(
+            CALLOUT_CARD_WIDTH_PIXELS - SHORTCUTS_CARD_GAP_PIXELS - shortcuts_button_side_pixels
+        )
+        shortcuts_row_layout = QHBoxLayout()
+        shortcuts_row_layout.setSpacing(SHORTCUTS_CARD_GAP_PIXELS)
+        shortcuts_row_layout.addWidget(shortcuts_title_card)
+        shortcuts_row_layout.addWidget(shortcuts_button)
+        shortcuts_row_layout.addStretch(1)
+        page_layout.addLayout(shortcuts_row_layout)
         page_layout.addStretch(1)  # stretch > 0 takes all spare height, so the cards don't grow
 
     def _create_duration_picker(self, settings_field_name: str) -> DurationPicker:

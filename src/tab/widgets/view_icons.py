@@ -75,6 +75,36 @@ def paint_settings_icon(painter: QPainter) -> None:
         painter.drawEllipse(QPointF(knob_x, slider_y), 2, 2)
 
 
+def paint_shortcuts_icon(painter: QPainter) -> None:
+    """The ⌘ (command key) symbol: a # of two horizontal and two vertical lines, each pair of
+    line ends at a corner joined by a three-quarter loop."""
+    half_square = 3.2  # half the side of the square in the middle
+    loop_radius = 3.0
+    line_reach = half_square + loop_radius  # from the centre to where a line meets its loop
+    command_symbol = QPainterPath()
+    for offset in (-half_square, half_square):
+        command_symbol.moveTo(QPointF(12 + offset, 12 - line_reach))
+        command_symbol.lineTo(QPointF(12 + offset, 12 + line_reach))
+        command_symbol.moveTo(QPointF(12 - line_reach, 12 + offset))
+        command_symbol.lineTo(QPointF(12 + line_reach, 12 + offset))
+    # Each loop leaves out the quarter facing the middle; angles are Qt's (counterclockwise).
+    for horizontal_side, vertical_side, start_degrees in (
+        (-1, -1, 0),  # top left
+        (1, -1, 270),  # top right
+        (1, 1, 180),  # bottom right
+        (-1, 1, 90),  # bottom left
+    ):
+        loop_bounds = QRectF(
+            12 + horizontal_side * line_reach - loop_radius,
+            12 + vertical_side * line_reach - loop_radius,
+            2 * loop_radius,
+            2 * loop_radius,
+        )
+        command_symbol.arcMoveTo(loop_bounds, start_degrees)
+        command_symbol.arcTo(loop_bounds, start_degrees, 270)
+    painter.drawPath(command_symbol)
+
+
 def paint_profile_icon(painter: QPainter) -> None:
     painter.drawEllipse(QPointF(12, 8.5), 3.8, 3.8)
     painter.drawArc(QRectF(5, 15, 14, 12), 0, 180 * 16)

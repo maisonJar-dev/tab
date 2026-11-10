@@ -15,7 +15,9 @@ Uses the `src/` layout so tests run against the installed package, not stray fil
     later (Tab/Space/Enter continue at once and cut the sound). Only clock, painting and keys; the geometry is in `core/cube_to_word_animation.py`.
   - `main.py`: views fill the window over the wall; Tab opens the switcher; Ctrl+Tab / Ctrl+Shift+Tab
     move keyboard focus through the open view's controls; Space starts/pauses the open Timer or
-    Duration view (unless a focused control takes it); Profile button in the bottom-left corner.
+    Duration view (unless a focused control takes it); Profile button in the bottom-left corner;
+    Ctrl+S opens the Shortcuts page and Ctrl+P opens Profile; the same key pressed on that page
+    returns to the page you came from.
 - `tab/widgets/`: reusable UI pieces.
   - `tab_switcher.py`: the Tab-key overlay: a centred horizontal row of views over the undimmed
     window. ←/→, Ctrl+Tab / Ctrl+Shift+Tab, or scroll moves the highlight; Enter or a left click
@@ -44,7 +46,7 @@ Uses the `src/` layout so tests run against the installed package, not stray fil
     from `assets/` with baby blue headings; used beside the Timer and Duration clocks.
   - `callout_card.py`: the rounded cards (with title and label/value rows) that Settings and Profile
     are built from, so both pages share one look.
-- `tab/views/`: one widget per view: `workspace.py`, `timer_view.py`, `duration_view.py`, `settings.py` (in the switcher) and `profile.py` (corner button).
+- `tab/views/`: one widget per view: `workspace.py`, `timer_view.py`, `duration_view.py`, `settings.py` (in the switcher), `profile.py` (corner button) and `shortcuts.py` (Ctrl+S or Settings).
   - `duration_view.py`: open-ended focus session (knot icon): the knot over a count-up clock,
     with Start, Pause and Reset in a row and a full-width Finish ✓ beneath (as on the Timer);
     Reset zeroes it without a session, Finish asks for the session's impact rating. An "i"
@@ -54,11 +56,14 @@ Uses the `src/` layout so tests run against the installed package, not stray fil
     Impact Score (average session rating, out of 8), a grey "Since:" date under all-time focus,
     and a red reset that asks you to type "hard work is the goal"; the dial's focus hours (with
     the totaliser reset). Duration sessions count towards all of these too.
+  - `shortcuts.py`: every key binding and knot gesture as callout cards in two columns, keys drawn
+    as keycaps. The list is written out by hand: a new key binding must be added here too.
   - `settings.py`: stacked callout cards (Pomodoro, Short break, Long break, General: phase
     labels; Intro sound, which silences the splash soundtrack from the next launch; and
     Notifications, which stops the phase-end notification at once, keeping the pause, swoosh
     and hold; Link work and duration, which shares one clock between work phases and the
-    duration). Duration
+    duration), then a Shortcuts title card with a square ⌘ button beside it that opens the
+    Shortcuts page. Duration
     drums stay collapsed to the picked value and expand on hover or keyboard focus.
   - `timer_view.py` has a full-width ✓ under Start/Pause/Reset that completes the work session
     early (enabled once a work phase has started), and an "i" beside the countdown opens a short
@@ -112,6 +117,8 @@ One `PomodoroSettings` instance is shared by `SettingsView` (edits and saves it)
   `theme.qss` with `qproperty-accentColor: #hex;`. The dial raises if any are missing.
 - Adding a view to the switcher = add a view in `views/`, an icon in `view_icons.py`, and one entry
   in `MainScreen`'s `switcher_entries_with_views`.
+- Adding a keyboard shortcut = one `MainScreen._add_shortcut("Ctrl+X", action)` call (it closes an
+  open switcher first unless `closes_open_tab_switcher=False`), plus a row in `views/shortcuts.py`.
 - Files on disk (invalid files raise on startup rather than silently falling back to defaults):
   - Settings: `$XDG_CONFIG_HOME/tab/settings.json` (default `~/.config/tab/settings.json`).
   - Timer progress: `$XDG_STATE_HOME/tab/progress.json` (default `~/.local/state/tab/progress.json`).

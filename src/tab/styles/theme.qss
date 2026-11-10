@@ -176,6 +176,39 @@ QLabel {
     qproperty-selectionBandColor: #1B1C1F;
 }
 
+/* Shortcuts page: keys as small keycaps, in the controls' outline style */
+#callout_card #shortcut_keycap {
+    color: #F5F1F1;
+    background-color: #0A0A0A;
+    border: 1px solid #2B2D31;
+    border-radius: 6px;
+    padding: 2px 7px;
+    font-family: "DejaVu Sans Mono", "Courier New", monospace;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+#callout_card #shortcut_keycap_separator {
+    color: #8C8E92;
+    font-weight: 400;
+}
+
+/* Settings' Shortcuts button: its own square card beside the Shortcuts title card */
+#settings_shortcuts_button {
+    background-color: #0F1012;
+    border: 1px solid #2B2D31;
+    border-radius: 16px;
+    padding: 0px;
+    qproperty-iconColor: #8C8E92;
+    qproperty-hoverIconColor: #89CFF0;
+    qproperty-selectedIconColor: #B89A72;
+    qproperty-disabledIconColor: #2B2D31;
+}
+
+#settings_shortcuts_button:hover {
+    background-color: #1B1C1F;
+}
+
 /* Phase-end toast, used only when the OS has no tray for desktop notifications */
 #in_window_notification_label {
     background-color: #0F1012;
@@ -367,6 +400,7 @@ QCheckBox::indicator:checked {
    Only TabFocus controls get focus, so clicks never show it. */
 #profile_corner_button:focus,
 #info_button:focus,
+#settings_shortcuts_button:focus,
 #timer_control_button:focus,
 #session_rating_button:focus,
 #session_rating_skip_button:focus,
@@ -374,8 +408,14 @@ QPushButton:focus {
     border-color: #B89A72;
 }
 
-/* Two ids beat "#destructive_button" above; focus shows as a tan ring with the red text kept. */
-#callout_card #destructive_button:focus,
+/* Two ids beat "#destructive_button" above. Profile's all-time reset shows focus as a shaded
+   red fill with its red outline kept (a tan ring would read as an everyday button); the
+   confirmation dialog's Reset keeps the tan ring. */
+#callout_card #destructive_button:focus {
+    border-color: #E5484D;
+    background-color: rgba(229, 72, 77, 0.18);
+}
+
 #confirmation_dialog #destructive_button:focus {
     border-color: #B89A72;
 }
