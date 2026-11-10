@@ -93,6 +93,8 @@ feature/x ──squash──▶ development ──rebase (fast-forward)──▶
    `git switch development && git merge --squash feature/x && git commit`
 4. **Rebase `main`** onto `development`: `git switch main && git rebase development`.
    `main` never gets its own commits, so this is a fast-forward and rewrites no history.
+   Give the [merge summary](#reports) first, every time, then **wait for the owner to
+   confirm** before rebasing.
 5. **Update `development`** to the head of `main` (`git reset --hard main` on `development`),
    if they differ. After step 4 they normally already match.
 6. **Delete the feature branch**, locally and on the remote if it was pushed.
@@ -114,10 +116,38 @@ Each check guards a step that is hard to undo. If one fails, stop and ask; don't
 - Before pushing: `main` and `development` are ahead of their remotes and not behind.
   Never force-push `main` or `development`.
 
+### Reports
+
+**Merge summary**: before every rebase of `main` (step 4), say what is about to reach `main`,
+then stop and ask for confirmation. Rebase only after the owner says yes, even when they asked
+for the whole release up front; if they say no, leave `main` as it is and ask what to change.
+
+- The commits on `development` that `main` lacks (`git log --oneline main..development`).
+- What they change, in plain words, grouped by area (features, fixes, settings, docs).
+- Files changed (`git diff --stat main development`).
+- Anything that needs care: changed settings or progress file formats, new dependencies,
+  deleted files, behaviour that changes for existing users.
+- Test and lint results on `development`.
+
+**Release report**: after a release, a table with one row per step, skipped steps included
+with the reason (so it's clear every step was considered):
+
+```markdown
+| Step | Check | Result |
+|---|---|---|
+| 3. Squash into `development` | clean tree, ruff and pytest pass, branched from `development` | `abc1234` |
+| 4. Rebase `main` | 0 commits on `main` missing from `development` | fast-forward to `abc1234` |
+| 5. Update `development` | already equal to `main` | no reset needed |
+| ... | ... | ... |
+```
+
+Then one line each: the commit `main`, `development` and `origin` are on; the current branch;
+and the command to recover the deleted feature branch (`git branch feature/x <hash>`).
+
 ### Rules for agents
 
 - Run branch operations (create, switch, squash, rebase, reset, delete, push) only when the
-  owner asks for them. Report each step's result and the final state of every branch.
+  owner asks for them. Report as in [Reports](#reports).
 - Commit only when asked. Never delete or rewrite `main` or `development`.
 - If a deleted feature branch is needed again, recreate it from its last commit
   (`git branch feature/x <hash>`); git keeps unreferenced commits for about 30 days.
