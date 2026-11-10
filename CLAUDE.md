@@ -72,6 +72,52 @@ Rules specific to this directory (only if any exist).
 
 ## Git
 
-- `main`: stable. `development`: integration branch.
-- Branches are created, switched, and merged by the repo owner, not by agents.
-- Commit only when asked.
+### Branches
+
+- `main`: the working version. Always runs and passes tests.
+- `development`: where features are integrated. After every release it equals `main`.
+- `feature/<short-kebab-name>`: one per feature, branched from `development`.
+
+### Flow
+
+```text
+feature/x ──squash──▶ development ──rebase (fast-forward)──▶ main
+                         ▲                                    │
+                         └─────── reset to main's head ◀──────┘   then delete feature/x
+```
+
+1. **Branch** a feature off the latest `development`.
+2. **Commit** on the feature branch as work goes (only when asked; see below).
+3. **Squash-merge** the feature into `development` as one commit whose message summarises the
+   feature's commits, grouped by area:
+   `git switch development && git merge --squash feature/x && git commit`
+4. **Rebase `main`** onto `development`: `git switch main && git rebase development`.
+   `main` never gets its own commits, so this is a fast-forward and rewrites no history.
+5. **Update `development`** to the head of `main` (`git reset --hard main` on `development`),
+   if they differ. After step 4 they normally already match.
+6. **Delete the feature branch**, locally and on the remote if it was pushed.
+7. **Push** `main` and `development` (only when asked).
+
+### Checks before each step
+
+Each check guards a step that is hard to undo. If one fails, stop and ask; don't work around it.
+
+- Before squashing: the feature branch is committed and clean, `ruff check`, `ruff format --check`
+  and `pytest` pass, and `development` is an ancestor of the feature (`git merge-base
+  --is-ancestor development feature/x`).
+- Before rebasing `main`: `main` has no commits that `development` lacks
+  (`git rev-list --count development..main` is `0`), so the rebase is a pure fast-forward.
+  Run `pytest` on `main` afterwards.
+- Before deleting the feature branch: `git diff --quiet development feature/x` succeeds
+  (identical files). A squash creates a new commit, so git reports the branch as unmerged and
+  `git branch -d` refuses; `git branch -D` is expected, but only after this check passes.
+- Before pushing: `main` and `development` are ahead of their remotes and not behind.
+  Never force-push `main` or `development`.
+
+### Rules for agents
+
+- Run branch operations (create, switch, squash, rebase, reset, delete, push) only when the
+  owner asks for them. Report each step's result and the final state of every branch.
+- Commit only when asked. Never delete or rewrite `main` or `development`.
+- If a deleted feature branch is needed again, recreate it from its last commit
+  (`git branch feature/x <hash>`); git keeps unreferenced commits for about 30 days.
