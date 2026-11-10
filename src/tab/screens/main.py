@@ -24,11 +24,17 @@ PROFILE_BUTTON_MARGIN_PIXELS = 16
 
 class MainScreen(QWidget):
     """Views fill the window over the graffiti wall. Tab opens the switcher; Profile sits
-    in the bottom-left corner."""
+    in the bottom-left corner.
+
+    Ctrl+Tab / Ctrl+Shift+Tab move keyboard focus through the tabbable controls (focus policy
+    TabFocus) of the open view; while the switcher is open they move its highlight instead.
+    Plain Tab stays the switcher's key.
+    """
 
     def __init__(self, settings: PomodoroSettings, pomodoro_timer: PomodoroTimer) -> None:
         super().__init__()
-        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        # Click, not Tab: the screen holds focus for its shortcuts but isn't a Ctrl+Tab stop.
+        self.setFocusPolicy(Qt.FocusPolicy.ClickFocus)
         switcher_entries_with_views: list[tuple[SwitcherEntry, QWidget]] = [
             (SwitcherEntry("Workspace", paint_workspace_icon), WorkspaceView()),
             (SwitcherEntry("Timer", paint_timer_icon), TimerView(pomodoro_timer, settings)),
@@ -55,6 +61,7 @@ class MainScreen(QWidget):
             "Profile", paint_profile_icon, PROFILE_BUTTON_ICON_SIZE_PIXELS
         )
         self._profile_button.setObjectName("profile_corner_button")
+        self._profile_button.setFocusPolicy(Qt.FocusPolicy.TabFocus)
         self._profile_button.setParent(self)
         self._profile_button.show()
         self._profile_button.clicked.connect(self._show_profile)
@@ -71,6 +78,17 @@ class MainScreen(QWidget):
         # shut; a hold counts as one press, so it toggles once and stays put while you scroll.
         toggle_switcher_shortcut.setAutoRepeat(False)
         toggle_switcher_shortcut.activated.connect(self._toggle_tab_switcher)
+
+        for key_sequence, step in (
+            (QKeySequence("Ctrl+Tab"), 1),
+            (QKeySequence("Ctrl+Shift+Tab"), -1),
+            (QKeySequence("Ctrl+Shift+Backtab"), -1),  # X11/Wayland spelling of Ctrl+Shift+Tab
+        ):
+            keyboard_navigation_shortcut = QShortcut(key_sequence, self)
+            keyboard_navigation_shortcut.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
+            keyboard_navigation_shortcut.activated.connect(
+                lambda step=step: self._navigate_by_keyboard(step)
+            )
 
     def showEvent(self, show_event: QShowEvent) -> None:
         super().showEvent(show_event)
@@ -96,10 +114,22 @@ class MainScreen(QWidget):
         highlighted_index = self._content_area.currentIndex() if current_view_is_in_switcher else 0
         self._tab_switcher.open_with_highlight_on(highlighted_index)
 
+    def _navigate_by_keyboard(self, step: int) -> None:
+        """Ctrl+Tab (+1) / Ctrl+Shift+Tab (-1): the open switcher, else the open view's controls."""
+        if self._tab_switcher.isVisible():
+            self._tab_switcher.move_highlight(step)
+        elif step > 0:
+            # Hidden widgets are skipped by Qt's focus chain, so this only visits the open view.
+            self.focusNextChild()
+        else:
+            self.focusPreviousChild()
+
     def _show_view(self, view_index: int) -> None:
         self._content_area.setCurrentIndex(view_index)
         self._profile_button.setChecked(False)
+        self.setFocus()  # don't let focus drift from the hidden view into a random control
 
     def _show_profile(self) -> None:
         self._content_area.setCurrentWidget(self._profile_view)
         self._profile_button.setChecked(True)
+        self.setFocus()

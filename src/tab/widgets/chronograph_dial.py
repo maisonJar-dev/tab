@@ -4,11 +4,23 @@ from PySide6.QtCore import QPointF, QRectF, Qt
 from PySide6.QtGui import QColor, QFont, QPainter, QPaintEvent, QPen
 from PySide6.QtWidgets import QSizePolicy, QWidget
 
-from tab.core.timer import WORK_SESSIONS_BEFORE_LONG_BREAK
+from tab.core.timer import WORK_SESSIONS_BEFORE_LONG_BREAK, lap_fractions_from_current_lap
 from tab.widgets.theme_colors import raise_if_theme_colors_missing, theme_color_property
 
 MECHANICAL_BEATS_PER_SECOND = 8
-DIAL_UNIT_RADIUS = 100.0
+CURRENT_LAP_ARC_RADIUS = 95.0
+UPCOMING_LAP_RING_FIRST_RADIUS = 101.0  # just outside the face's edge (98)
+UPCOMING_LAP_RING_SPACING = 2.2
+MAXIMUM_UPCOMING_LAP_RINGS = 3  # settings allow up to 3:59, i.e. four laps
+LAP_ARC_PEN_WIDTH = 1.6
+# Upcoming-lap rings are quiet hairlines in the minor-marking grey (tan stays on the lap you're
+# in), and recede: each one out is fainter and thinner than the one inside it.
+FIRST_UPCOMING_LAP_RING_OPACITY = 0.45
+UPCOMING_LAP_RING_OPACITY_KEPT_PER_RING = 0.6
+FIRST_UPCOMING_LAP_RING_PEN_WIDTH = 0.9
+UPCOMING_LAP_RING_PEN_WIDTH_LOST_PER_RING = 0.2
+# Painting space reaches the outermost upcoming-lap ring plus half its pen.
+DIAL_UNIT_RADIUS = 106.5
 SUBDIAL_DISTANCE_FROM_CENTRE = 45.0
 SUBDIAL_RADIUS = 20.0
 FOCUS_TOTALISER_HOURS_PER_TURN = 12
@@ -25,6 +37,9 @@ class ChronographDial(QWidget):
     """3-6-9 chronograph drawn with QPainter.
 
     - Centre hand: minutes elapsed in the phase; an accent arc marks where the phase ends.
+      Phases over an hour lap the dial: the inner arc is the lap the hand is on, and each lap
+      still to come is a faint grey ring outside the face, innermost next, each fainter and
+      thinner than the one inside it so later laps recede. A ring drops as its lap starts.
     - 3 o'clock: seconds, stepping at a mechanical 8 beats per second.
     - 6 o'clock: work sessions completed in the current long-break cycle.
     - 9 o'clock: focus-time totaliser, one turn per 12 hours.
@@ -74,8 +89,8 @@ class ChronographDial(QWidget):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
-        # Work in a fixed coordinate system: origin at the centre, dial radius = 100 units.
-        dial_radius_pixels = min(self.width(), self.height()) / 2 - 8
+        # Fixed coordinate system: origin at the centre, face radius ~100 units.
+        dial_radius_pixels = min(self.width(), self.height()) / 2 - 2
         painter.translate(self.width() / 2, self.height() / 2)
         painter.scale(dial_radius_pixels / DIAL_UNIT_RADIUS, dial_radius_pixels / DIAL_UNIT_RADIUS)
 
@@ -83,7 +98,7 @@ class ChronographDial(QWidget):
         # traceback surfaces instead.
         try:
             self._draw_face_and_minute_track(painter)
-            self._draw_phase_length_arc(painter)
+            self._draw_phase_lap_arcs(painter)
             self._draw_text(
                 painter, QPointF(0, -28), "tab", pixel_size=10, color=self._marking_color
             )
@@ -115,16 +130,31 @@ class ChronographDial(QWidget):
                 painter, numeral_position, str(numeral), pixel_size=6, color=self._marking_color
             )
 
-    def _draw_phase_length_arc(self, painter: QPainter) -> None:
-        phase_fraction_of_hour = min(1.0, self._phase_duration_seconds / 3600)
-        arc_radius = 95.0
-        arc_box = QRectF(-arc_radius, -arc_radius, arc_radius * 2, arc_radius * 2)
-        painter.setPen(_round_capped_pen(self._accent_color, 1.6))
+    def _draw_phase_lap_arcs(self, painter: QPainter) -> None:
+        current_lap_fraction, *upcoming_lap_fractions = lap_fractions_from_current_lap(
+            self._phase_duration_seconds, self._elapsed_seconds_in_phase
+        )
+        if len(upcoming_lap_fractions) > MAXIMUM_UPCOMING_LAP_RINGS:
+            raise ValueError(
+                f"Phase needs {len(upcoming_lap_fractions)} upcoming-lap rings; the dial has room "
+                f"for {MAXIMUM_UPCOMING_LAP_RINGS}"
+            )
+        painter.setPen(_round_capped_pen(self._accent_color, LAP_ARC_PEN_WIDTH))
         painter.setBrush(Qt.BrushStyle.NoBrush)
-        # Qt arcs: 1/16th degree units, 0 = 3 o'clock, positive = counter-clockwise.
-        twelve_o_clock_start_angle = 90 * 16
-        clockwise_span_angle = -round(phase_fraction_of_hour * 360 * 16)
-        painter.drawArc(arc_box, twelve_o_clock_start_angle, clockwise_span_angle)
+        _draw_arc_from_twelve(painter, CURRENT_LAP_ARC_RADIUS, current_lap_fraction)
+        for ring_index, upcoming_lap_fraction in enumerate(upcoming_lap_fractions):
+            ring_radius = UPCOMING_LAP_RING_FIRST_RADIUS + ring_index * UPCOMING_LAP_RING_SPACING
+            receding_color = QColor(self._minor_marking_color)
+            receding_color.setAlphaF(
+                FIRST_UPCOMING_LAP_RING_OPACITY
+                * UPCOMING_LAP_RING_OPACITY_KEPT_PER_RING**ring_index
+            )
+            receding_pen_width = (
+                FIRST_UPCOMING_LAP_RING_PEN_WIDTH
+                - UPCOMING_LAP_RING_PEN_WIDTH_LOST_PER_RING * ring_index
+            )
+            painter.setPen(_round_capped_pen(receding_color, receding_pen_width))
+            _draw_arc_from_twelve(painter, ring_radius, upcoming_lap_fraction)
 
     def _draw_all_subdials(self, painter: QPainter) -> None:
         beats_elapsed = int(self._elapsed_seconds_in_phase * MECHANICAL_BEATS_PER_SECOND)
@@ -229,6 +259,14 @@ class ChronographDial(QWidget):
         painter.setPen(color)
         text_box = QRectF(centre.x() - 15, centre.y() - pixel_size, 30, pixel_size * 2)
         painter.drawText(text_box, Qt.AlignmentFlag.AlignCenter, text)
+
+
+def _draw_arc_from_twelve(painter: QPainter, radius: float, fraction_of_turn: float) -> None:
+    arc_box = QRectF(-radius, -radius, radius * 2, radius * 2)
+    # Qt arcs: 1/16th degree units, 0 = 3 o'clock, positive = counter-clockwise.
+    twelve_o_clock_start_angle = 90 * 16
+    clockwise_span_angle = -round(fraction_of_turn * 360 * 16)
+    painter.drawArc(arc_box, twelve_o_clock_start_angle, clockwise_span_angle)
 
 
 def _round_capped_pen(color: QColor, width: float) -> QPen:

@@ -1,7 +1,18 @@
 import math
 
-from PySide6.QtCore import QEasingCurve, QRectF, Qt, QVariantAnimation, Signal
-from PySide6.QtGui import QColor, QFont, QMouseEvent, QPainter, QPaintEvent, QWheelEvent
+from PySide6.QtCore import QEasingCurve, QEvent, QRectF, Qt, QVariantAnimation, Signal
+from PySide6.QtGui import (
+    QColor,
+    QEnterEvent,
+    QFocusEvent,
+    QFont,
+    QKeyEvent,
+    QMouseEvent,
+    QPainter,
+    QPaintEvent,
+    QPen,
+    QWheelEvent,
+)
 from PySide6.QtWidgets import QSizePolicy, QWidget
 
 from tab.widgets.theme_colors import raise_if_theme_colors_missing, theme_color_property
@@ -14,6 +25,8 @@ DISTANT_ITEM_MINIMUM_SCALE = 0.7
 SELECTED_ITEM_PIXEL_SIZE = 22
 SNAP_ANIMATION_MILLISECONDS = 220
 WHEEL_DELTA_PER_NOTCH = 120
+ACTIVE_BAND_OUTLINE_WIDTH_PIXELS = 1.5
+KEYBOARD_FOCUS_REASONS = (Qt.FocusReason.TabFocusReason, Qt.FocusReason.BacktabFocusReason)
 THEME_COLOR_PROPERTY_NAMES = ["selectedTextColor", "unselectedTextColor", "selectionBandColor"]
 
 
@@ -22,6 +35,9 @@ class RotaryPicker(QWidget):
 
     `scroll_position` is a float index (1.0 = second item centred). Painting maps each item's
     distance from the centre to an angle on the drum, which sets its height, size and fade.
+
+    While in use (hovered, dragged, or focused from the keyboard) the selection band is outlined
+    in `selectedTextColor`, so it's clear which drum input goes to.
     """
 
     selected_index_changed_by_user = Signal(int)
@@ -48,6 +64,7 @@ class RotaryPicker(QWidget):
         self._scroll_position = 0.0
         self._drag_start_mouse_y: float | None = None
         self._drag_start_scroll_position = 0.0
+        self._has_keyboard_focus = False
 
         self._snap_animation = QVariantAnimation(self)
         self._snap_animation.setDuration(SNAP_ANIMATION_MILLISECONDS)
@@ -61,6 +78,15 @@ class RotaryPicker(QWidget):
     @property
     def is_being_dragged(self) -> bool:
         return self._drag_start_mouse_y is not None
+
+    @property
+    def has_keyboard_focus(self) -> bool:
+        """Focus that arrived by Tab/Ctrl+Tab, not Qt focusing the first widget of a new window."""
+        return self._has_keyboard_focus
+
+    @property
+    def is_in_use(self) -> bool:
+        return self.underMouse() or self.is_being_dragged or self._has_keyboard_focus
 
     def set_item_labels(self, item_labels: list[str]) -> None:
         if len(item_labels) != len(self._item_labels):
@@ -82,6 +108,33 @@ class RotaryPicker(QWidget):
         if notches_scrolled == 0:
             return
         step = -1 if notches_scrolled > 0 else 1
+        self._select_by_user(self._selected_index + step)
+
+    def enterEvent(self, enter_event: QEnterEvent) -> None:
+        super().enterEvent(enter_event)
+        self.update()
+
+    def leaveEvent(self, leave_event: QEvent) -> None:
+        super().leaveEvent(leave_event)
+        self.update()
+
+    def focusInEvent(self, focus_event: QFocusEvent) -> None:
+        super().focusInEvent(focus_event)
+        self._has_keyboard_focus = focus_event.reason() in KEYBOARD_FOCUS_REASONS
+        self.update()
+
+    def focusOutEvent(self, focus_event: QFocusEvent) -> None:
+        super().focusOutEvent(focus_event)
+        self._has_keyboard_focus = False
+        self.update()
+
+    def keyPressEvent(self, key_event: QKeyEvent) -> None:
+        """Up/Down step the selection; only reachable when a caller gives the drum focus."""
+        steps_by_key = {Qt.Key.Key_Up: -1, Qt.Key.Key_Down: 1}
+        step = steps_by_key.get(Qt.Key(key_event.key()))
+        if step is None:
+            super().keyPressEvent(key_event)
+            return
         self._select_by_user(self._selected_index + step)
 
     def mousePressEvent(self, mouse_event: QMouseEvent) -> None:
@@ -149,7 +202,11 @@ class RotaryPicker(QWidget):
             self.width() - 2 * SELECTION_BAND_INSET_PIXELS,
             band_height,
         )
-        painter.setPen(Qt.PenStyle.NoPen)
+        if self.is_in_use:
+            painter.setPen(QPen(self._selected_text_color, ACTIVE_BAND_OUTLINE_WIDTH_PIXELS))
+            band_rect = band_rect.adjusted(1, 1, -1, -1)  # keep the outline inside the widget
+        else:
+            painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(self._selection_band_color)
         painter.drawRoundedRect(
             band_rect, SELECTION_BAND_CORNER_RADIUS_PIXELS, SELECTION_BAND_CORNER_RADIUS_PIXELS

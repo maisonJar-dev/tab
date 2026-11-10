@@ -1,17 +1,20 @@
 /*
  * The single source of styling for tab. Widgets are targeted by objectName (#name).
  *
- * Palette: black and bone, with tan.
+ * Palette: black and bone, with tan and baby blue.
  *   black      #0A0A0A   window background
- *   surface    #0F1012   dial face, inputs, switcher and settings panels (near-black stone)
+ *   surface    #0F1012   dial face, inputs, switcher panel, callout cards (near-black stone)
  *   depth      #1B1C1F   selection band, lit timer control, hover, borders (charcoal)
  *   divider    #2B2D31   the switcher panel's edge; outlines on unlit controls (slate)
  *   muted      #8C8E92   secondary text, minor markings, unlit icons (stone grey)
  *   bone       #F5F1F1   primary text, major markings, control icons
- *   tan        #B89A72   the one accent: dial hands and arc, selected icons and phase, focus rings,
- *                        checked fills
+ *   tan        #B89A72   primary accent: dial hands and arc, selected icons and phase, focus rings,
+ *                        checked fills, values being edited
+ *   baby blue  #89CFF0   secondary accent: section headings (callout card titles). Cool against
+ *                        tan's warmth, so headings and values never read as the same thing.
+ *   red        #E5484D   destructive actions only (outline and text of buttons that erase data)
  *
- * Contrast rule: tan is ~7.5:1 on black, so it works as lines and as fills.
+ * Contrast rule: tan is ~7.5:1 on black, so it works as lines and as fills. Baby blue is ~11:1.
  * Text on a tan fill is black.
  */
 
@@ -61,7 +64,7 @@ QLabel {
 
 #profile_corner_button {
     background-color: transparent;
-    border: none;
+    border: 1px solid transparent; /* reserves the focus ring's width, so focus doesn't shift it */
     border-radius: 8px;
     padding: 8px;
     qproperty-iconColor: #8C8E92;
@@ -74,10 +77,37 @@ QLabel {
 
 /* Views */
 
-#settings_panel {
+/* Callout cards (widgets/callout_card.py), shared by Settings and Profile: one card per group.
+   Bold bone text and a baby blue title; values (duration drums, profile stats) in tan. */
+#callout_card {
     background-color: #0F1012;
     border: 1px solid #2B2D31;
     border-radius: 16px;
+}
+
+#callout_card QLabel,
+#callout_card QCheckBox {
+    font-weight: 600;
+}
+
+/* Two ids, so these outrank "#callout_card QLabel" (an id plus a type) above. */
+#callout_card #callout_card_title {
+    color: #89CFF0;
+    font-size: 16px;
+    font-weight: 700;
+}
+
+/* A grey note nested under the row it explains, like "Since: 11/09/2026". */
+#callout_card #callout_card_hint {
+    color: #8C8E92;
+    font-size: 12px;
+    font-weight: 400;
+}
+
+#callout_card #duration_picker_separator {
+    color: #B89A72;
+    font-size: 22px;
+    font-weight: 700;
 }
 
 #chronograph_dial {
@@ -108,8 +138,10 @@ QLabel {
     font-size: 40px;
 }
 
-#profile_stat_value {
+#callout_card #profile_stat_value {
+    color: #B89A72;
     font-size: 18px;
+    font-weight: 700;
 }
 
 /* Controls */
@@ -152,29 +184,76 @@ QPushButton:pressed {
     border-color: #1B1C1F;
 }
 
-QSpinBox {
+/* Session rating (timer view, during the break after a work session): small chips in the
+   timer controls' style; the number turns tan on hover. */
+#session_rating_prompt {
+    color: #8C8E92;
+    font-size: 12px;
+}
+
+#session_rating_button {
+    background-color: transparent;
+    color: #F5F1F1;
+    border: 1px solid #2B2D31;
+    border-radius: 10px;
+    padding: 6px 0;
+    font-weight: 700;
+}
+
+#session_rating_button:hover {
+    color: #B89A72;
+    border-color: #8C8E92;
+}
+
+#session_rating_button:pressed {
+    background-color: #1B1C1F;
+}
+
+/* Destructive actions (the all-time reset and its confirmation): red outline, so they never
+   look like the everyday buttons around them. */
+#destructive_button {
+    color: #E5484D;
+    border-color: #E5484D;
+}
+
+#destructive_button:hover {
+    background-color: #1B1C1F;
+}
+
+#destructive_button:disabled {
+    color: #8C8E92;
+    border-color: #2B2D31;
+}
+
+#confirmation_dialog {
     background-color: #0F1012;
-    border: 1px solid #1B1C1F;
-    border-radius: 6px;
-    padding: 4px 8px;
+}
+
+#confirmation_dialog_title {
+    color: #E5484D;
+    font-size: 16px;
+    font-weight: 700;
+}
+
+QLineEdit {
+    background-color: #0A0A0A;
+    border: 1px solid #2B2D31;
+    border-radius: 8px;
+    padding: 6px 10px;
     selection-background-color: #B89A72;
     selection-color: #0A0A0A;
-    max-width: 120px;
 }
 
-QSpinBox:focus {
+QLineEdit:focus {
     border-color: #B89A72;
-}
-
-/* Hidden via zero width: setButtonSymbols(NoButtons) collapses the text field once a border is styled. */
-QSpinBox::up-button,
-QSpinBox::down-button {
-    width: 0;
-    border: none;
 }
 
 QCheckBox {
     spacing: 10px;
+}
+
+QCheckBox:focus {
+    color: #B89A72;
 }
 
 QCheckBox::indicator {
@@ -187,5 +266,21 @@ QCheckBox::indicator {
 
 QCheckBox::indicator:checked {
     background-color: #B89A72;
+    border-color: #B89A72;
+}
+
+/* Keyboard focus (Ctrl+Tab): tan ring. Last in the file so it beats
+   equally specific states like :checked.
+   Only TabFocus controls get focus, so clicks never show it. */
+#profile_corner_button:focus,
+#timer_control_button:focus,
+#session_rating_button:focus,
+QPushButton:focus {
+    border-color: #B89A72;
+}
+
+/* Two ids beat "#destructive_button" above; focus shows as a tan ring with the red text kept. */
+#callout_card #destructive_button:focus,
+#confirmation_dialog #destructive_button:focus {
     border-color: #B89A72;
 }

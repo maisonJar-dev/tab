@@ -23,6 +23,7 @@ class TabSwitcher(QWidget):
     """Transparent overlay with a centred, horizontal row of tabs floating over the view.
 
     ↑/→ or scrolling up moves the highlight right; ↓/← or scrolling down moves it left (wrapping).
+    Ctrl+Tab / Ctrl+Shift+Tab (routed here by the parent while open) move it right / left too.
     Enter, or a left click anywhere except on another tile, chooses the highlighted tab, so you
     can scroll then click without aiming. Clicking a tile chooses that tile. Esc or a right
     click closes without choosing. Tab (handled by the parent) enters the highlighted tab if
@@ -88,9 +89,9 @@ class TabSwitcher(QWidget):
     def keyPressEvent(self, key_event: QKeyEvent) -> None:
         pressed_key = key_event.key()
         if pressed_key in MOVE_HIGHLIGHT_RIGHT_KEYS:
-            self._move_highlight(1)
+            self.move_highlight(1)
         elif pressed_key in MOVE_HIGHLIGHT_LEFT_KEYS:
-            self._move_highlight(-1)
+            self.move_highlight(-1)
         elif pressed_key in CHOOSE_KEYS:
             self._choose(self.highlighted_index)
         elif pressed_key == Qt.Key.Key_Escape:
@@ -106,7 +107,7 @@ class TabSwitcher(QWidget):
         self._accumulated_wheel_delta += wheel_delta
         while abs(self._accumulated_wheel_delta) >= WHEEL_DELTA_PER_STEP:
             scrolled_up = self._accumulated_wheel_delta > 0
-            self._move_highlight(1 if scrolled_up else -1)
+            self.move_highlight(1 if scrolled_up else -1)
             self._accumulated_wheel_delta -= (
                 WHEEL_DELTA_PER_STEP if scrolled_up else -WHEEL_DELTA_PER_STEP
             )
@@ -118,7 +119,8 @@ class TabSwitcher(QWidget):
         else:
             self.close_without_choosing()
 
-    def _move_highlight(self, step: int) -> None:
+    def move_highlight(self, step: int) -> None:
+        """Step the highlight right (+1) or left (-1), wrapping round the row."""
         tile_count = len(self._tile_group.buttons())
         self._tile_group.button((self.highlighted_index + step) % tile_count).setChecked(True)
 

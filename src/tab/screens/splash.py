@@ -1,6 +1,7 @@
 import time
+from pathlib import Path
 
-from PySide6.QtCore import QLineF, Qt, QTimer, Signal
+from PySide6.QtCore import QLineF, Qt, QTimer, QUrl, Signal
 from PySide6.QtGui import (
     QColor,
     QHideEvent,
@@ -11,6 +12,7 @@ from PySide6.QtGui import (
     QResizeEvent,
     QShowEvent,
 )
+from PySide6.QtMultimedia import QAudioOutput, QMediaPlayer
 from PySide6.QtWidgets import QWidget
 
 from tab.core.cube_to_word_animation import (
@@ -26,10 +28,13 @@ FRAME_INTERVAL_MILLISECONDS = 16  # ~60 fps
 MINIMUM_STROKE_WIDTH_PIXELS = 1.2
 AUTO_CONTINUE_DELAY_AFTER_INTRO_MILLISECONDS = 3000
 THEME_COLOR_PROPERTY_NAMES = ["lineColor"]
+# One recording timed to the animation's constants: regenerate it if they change.
+INTRO_SOUND_PATH = Path(__file__).parent.parent / "assets" / "splash_intro.wav"
 
 
 class SplashScreen(QWidget):
-    """Plays the cube-to-"tab" intro, then emits `continue_requested` 3 s after it ends.
+    """Plays the cube-to-"tab" intro and its soundtrack, then emits `continue_requested` 3 s
+    after it ends.
 
     Tab, Space or Enter emits it straight away, even mid-intro. The geometry lives in
     core.cube_to_word_animation; this widget only supplies the clock, paints and handles keys.
@@ -58,6 +63,12 @@ class SplashScreen(QWidget):
         self._auto_continue_timer.setInterval(AUTO_CONTINUE_DELAY_AFTER_INTRO_MILLISECONDS)
         self._auto_continue_timer.timeout.connect(self.continue_requested.emit)
 
+        if not INTRO_SOUND_PATH.is_file():
+            raise FileNotFoundError(f"Splash intro sound missing: {INTRO_SOUND_PATH}")
+        self._intro_sound_player = QMediaPlayer(self)
+        self._intro_sound_player.setAudioOutput(QAudioOutput(self))
+        self._intro_sound_player.setSource(QUrl.fromLocalFile(str(INTRO_SOUND_PATH)))
+
     @property
     def is_intro_finished(self) -> bool:
         return self._intro_stopwatch.elapsed_seconds() >= TOTAL_DURATION_SECONDS
@@ -68,12 +79,15 @@ class SplashScreen(QWidget):
         self._intro_stopwatch.reset()
         self._intro_stopwatch.start()
         self._frame_timer.start()
+        self._intro_sound_player.setPosition(0)
+        self._intro_sound_player.play()
 
     def hideEvent(self, hide_event: QHideEvent) -> None:
         super().hideEvent(hide_event)
         self._frame_timer.stop()
         self._auto_continue_timer.stop()
         self._intro_stopwatch.pause()
+        self._intro_sound_player.stop()  # skipped with Tab/Space/Enter: cut the sound too
 
     def resizeEvent(self, resize_event: QResizeEvent) -> None:
         super().resizeEvent(resize_event)
